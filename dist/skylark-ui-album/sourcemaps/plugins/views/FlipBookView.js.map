@@ -1,0 +1,1 @@
+{"version":3,"sources":["plugins/views/FlipBookView.js"],"names":["define"],"mappings":";;;;;;;AAAAA,UAAU","file":"../../../plugins/views/FlipBookView.js","sourcesContent":["define([],function(){\r\n\t// TODO : This module is in developping.\r\n});"]}
