@@ -8,6 +8,6 @@ define([
     "./plugins/views/SliderView",
     "./plugins/views/CarouselView",
     "./plugins/views/LightBoxView"
-], function(Album) {
+], function (Album) {
     return Album;
-})
+});

@@ -4,14 +4,14 @@ define([
   "skylark-utils/eventer",
   "skylark-utils/query",
   '../../Album',
-],function(langx,noder, eventer,$ ,Album) {
+], function (langx, noder, eventer, $, Album) {
 
   'use strict'
 
   var VideoItemFactory = Album.ItemFactoryBase.inherit({
-    klassName : "VideoItemFactory",
+    klassName: "VideoItemFactory",
 
-    options : {
+    options: {
       // The class for video content elements:
       videoContentClass: 'video-content',
       // The class for video when it is loading:
@@ -24,9 +24,9 @@ define([
       videoSourcesProperty: 'sources'
     },
 
-    initOptions : function(options) {
+    initOptions: function (options) {
       this.overrided();
-      this.options = langx.mixin(this.options,VideoItemFactory.prototype.options,options);
+      this.options = langx.mixin(this.options, VideoItemFactory.prototype.options, options);
     },
 
     handleSlide: function (index) {
@@ -36,17 +36,15 @@ define([
       }
     },
 
-    render : function(obj, callback, videoInterface) {
+    render: function (obj, callback, videoInterface) {
       var that = this
       var options = this.options
       var videoContainerNode = noder.createElement("div")
       var videoContainer = $(videoContainerNode)
-      var errorArgs = [
-        {
-          type: 'error',
-          target: videoContainerNode
-        }
-      ]
+      var errorArgs = [{
+        type: 'error',
+        target: videoContainerNode
+      }]
       var video = videoInterface || document.createElement('video')
       var url = this.getItemProperty(obj, options.urlProperty)
       var type = this.getItemProperty(obj, options.typeProperty)
@@ -95,9 +93,9 @@ define([
       }
       playMediaControl.href = url
       if (video.src) {
-        video.controls = true
-        ;(videoInterface || $(video))
-          .on('error', function () {
+        video.controls = true;
+        (videoInterface || $(video))
+        .on('error', function () {
             that.setTimeout(callback, errorArgs)
           })
           .on('pause', function () {
@@ -106,8 +104,8 @@ define([
             videoContainer
               .removeClass(that.options.videoLoadingClass)
               .removeClass(that.options.videoPlayingClass)
-            that.album.trigger("item.pause",{
-              item : that
+            that.album.trigger("item.pause", {
+              item: that
             });
             delete that.playingVideo
             if (that.interval) {
@@ -120,8 +118,8 @@ define([
               .removeClass(that.options.videoLoadingClass)
               .addClass(that.options.videoPlayingClass);
 
-            that.album.trigger("item.running",{
-              item : that
+            that.album.trigger("item.running", {
+              item: that
             });
           })
           .on('play', function () {
@@ -130,8 +128,8 @@ define([
             videoContainer.addClass(that.options.videoLoadingClass)
             that.playingVideo = video
 
-            that.album.trigger("item.run",{
-              item : that
+            that.album.trigger("item.run", {
+              item: that
             });
           })
         $(playMediaControl).on('click', function (event) {
@@ -147,12 +145,10 @@ define([
         )
       }
       videoContainerNode.appendChild(playMediaControl)
-      this.setTimeout(callback, [
-        {
-          type: 'load',
-          target: videoContainerNode
-        }
-      ])
+      this.setTimeout(callback, [{
+        type: 'load',
+        target: videoContainerNode
+      }])
       return videoContainerNode
 
     }
@@ -162,12 +158,12 @@ define([
 
 
   var pluginInfo = {
-    name : "video",
-    mimeType : "video",
-    ctor : VideoItemFactory
+    name: "video",
+    mimeType: "video",
+    ctor: VideoItemFactory
   };
 
-  Album.installPlugin("items",pluginInfo);
+  Album.installPlugin("items", pluginInfo);
 
   return pluginInfo;
 
