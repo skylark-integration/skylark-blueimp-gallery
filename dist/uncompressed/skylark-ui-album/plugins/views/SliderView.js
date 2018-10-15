@@ -4,12 +4,10 @@ define([
   'skylark-langx/langx',
   '../../helper',
   '../../Album'
-],function (langx,$,Album) {
+], function (langx, $, Album) {
   'use strict'
-
   var SliderView = Album.ViewBase.inherit({
-    klassName : "SliderView",
-
+    klassName: "SliderView",
     options: {
       // The Id, element or querySelector of the album view:
       container: null,
@@ -155,17 +153,16 @@ define([
       startSlideshow: true
     },
     */
-    
-    console:
-      window.console && typeof window.console.log === 'function'
-        ? window.console
-        : { log: function () {} },
+
+    console: window.console && typeof window.console.log === 'function' ?
+      window.console : {
+        log: function () {}
+      },
 
     // Detect touch, transition, transform and background-size support:
     support: (function (element) {
       var support = {
-        touch:
-          window.ontouchstart !== undefined ||
+        touch: window.ontouchstart !== undefined ||
           (window.DocumentTouch && document instanceof DocumentTouch)
       }
       var transitions = {
@@ -197,7 +194,8 @@ define([
           break
         }
       }
-      function elementTests () {
+
+      function elementTests() {
         var transition = support.transition
         var prop
         var translateZ
@@ -222,13 +220,13 @@ define([
           element.style.backgroundSize = 'contain'
           support.backgroundSize.contain =
             window
-              .getComputedStyle(element)
-              .getPropertyValue('background-size') === 'contain'
+            .getComputedStyle(element)
+            .getPropertyValue('background-size') === 'contain'
           element.style.backgroundSize = 'cover'
           support.backgroundSize.cover =
             window
-              .getComputedStyle(element)
-              .getPropertyValue('background-size') === 'cover'
+            .getComputedStyle(element)
+            .getPropertyValue('background-size') === 'cover'
         }
         document.body.removeChild(element)
       }
@@ -242,19 +240,17 @@ define([
       // for the CSS3 tests using window.getComputedStyle to be applicable:
     })(document.createElement('div')),
 
-    requestAnimationFrame:
-      window.requestAnimationFrame ||
+    requestAnimationFrame: window.requestAnimationFrame ||
       window.webkitRequestAnimationFrame ||
       window.mozRequestAnimationFrame,
 
-    cancelAnimationFrame:
-      window.cancelAnimationFrame ||
+    cancelAnimationFrame: window.cancelAnimationFrame ||
       window.webkitCancelRequestAnimationFrame ||
       window.webkitCancelAnimationFrame ||
       window.mozCancelAnimationFrame,
 
-    init: function (album,options){
-      this.overrided(album,options);
+    init: function (album, options) {
+      this.overrided(album, options);
 
       this.list = this.album.items;
       this.options.container = this.album.el;
@@ -357,14 +353,14 @@ define([
       if (this.elements[this.index] > 1) {
         this.timeout = this.setTimeout(
           (!this.requestAnimationFrame && this.slide) ||
-            function (to, speed) {
-              that.animationFrameId = that.requestAnimationFrame.call(
-                window,
-                function () {
-                  that.slide(to, speed)
-                }
-              )
-            },
+          function (to, speed) {
+            that.animationFrameId = that.requestAnimationFrame.call(
+              window,
+              function () {
+                that.slide(to, speed)
+              }
+            )
+          },
           [this.index + 1, this.options.slideshowTransitionSpeed],
           this.interval
         )
@@ -439,7 +435,8 @@ define([
 
     close: function () {
       var that = this
-      function closeHandler (event) {
+
+      function closeHandler(event) {
         if (event.target === that.container[0]) {
           that.container.off(that.support.transition.end, closeHandler)
           that.handleClose()
@@ -539,25 +536,21 @@ define([
       ) {
         // Preventing the default mousedown action is required
         // to make touch emulation work with Firefox:
-        event.preventDefault()
-        ;(event.originalEvent || event).touches = [
-          {
-            pageX: event.pageX,
-            pageY: event.pageY
-          }
-        ]
+        event.preventDefault();
+        (event.originalEvent || event).touches = [{
+          pageX: event.pageX,
+          pageY: event.pageY
+        }]
         this.ontouchstart(event)
       }
     },
 
     onmousemove: function (event) {
-      if (this.touchStart) {
-        ;(event.originalEvent || event).touches = [
-          {
-            pageX: event.pageX,
-            pageY: event.pageY
-          }
-        ]
+      if (this.touchStart) {;
+        (event.originalEvent || event).touches = [{
+          pageX: event.pageX,
+          pageY: event.pageY
+        }]
         this.ontouchmove(event)
       }
     },
@@ -642,9 +635,9 @@ define([
           this.touchDelta.x = touchDeltaX =
             touchDeltaX /
             ((!index && touchDeltaX > 0) ||
-            (index === this.num - 1 && touchDeltaX < 0)
-              ? Math.abs(touchDeltaX) / this.slideWidth + 1
-              : 1)
+              (index === this.num - 1 && touchDeltaX < 0) ?
+              Math.abs(touchDeltaX) / this.slideWidth + 1 :
+              1)
           indices = [index]
           if (index) {
             indices.push(index - 1)
@@ -678,8 +671,7 @@ define([
       var isPastBounds =
         (!index && this.touchDelta.x > 0) ||
         (index === this.num - 1 && this.touchDelta.x < 0)
-      var isValidClose =
-        !isValidSlide &&
+      var isValidClose = !isValidSlide &&
         this.options.closeOnSwipeUpOrDown &&
         ((isShortDuration && Math.abs(this.touchDelta.y) > 20) ||
           Math.abs(this.touchDelta.y) > this.slideHeight / 2)
@@ -829,7 +821,8 @@ define([
       var options = this.options
       var target = event.target || event.srcElement
       var parent = target.parentNode
-      function isTarget (className) {
+
+      function isTarget(className) {
         return $(target).hasClass(className) || $(parent).hasClass(className)
       }
       if (isTarget(options.toggleClass)) {
@@ -938,7 +931,7 @@ define([
     },
 
     createElement: function (obj, callback) {
-      var element = this.album.renderItem(obj,callback);
+      var element = this.album.renderItem(obj, callback);
       $(element).addClass(this.options.slideContentClass);
       return element;
     },
@@ -947,10 +940,10 @@ define([
       if (!this.elements[index]) {
         if (this.slides[index].firstChild) {
           this.elements[index] = $(this.slides[index]).hasClass(
-            this.options.slideErrorClass
-          )
-            ? 3
-            : 2
+              this.options.slideErrorClass
+            ) ?
+            3 :
+            2
         } else {
           this.elements[index] = 1 // Loading
           $(this.slides[index]).addClass(this.options.slideLoadingClass)
@@ -1008,9 +1001,9 @@ define([
         slide.style.left = index * -this.slideWidth + 'px'
         this.move(
           index,
-          this.index > index
-            ? -this.slideWidth
-            : this.index < index ? this.slideWidth : 0,
+          this.index > index ?
+          -this.slideWidth :
+          this.index < index ? this.slideWidth : 0,
           0
         )
       }
@@ -1093,13 +1086,13 @@ define([
 
     initStartIndex: function () {
       var album = this.album,
-          index = this.options.index;
+        index = this.options.index;
       var i
       // Check if the index is given as a list object:
       if (index && typeof index !== 'number') {
         for (i = 0; i < this.num; i += 1) {
           if (
-            this.list[i] === index || album.getItemUrl(this.list[i]) ===  album.getItemUrl(index) ) {
+            this.list[i] === index || album.getItemUrl(this.list[i]) === album.getItemUrl(index)) {
             index = i
             break
           }
@@ -1112,11 +1105,12 @@ define([
     initEventListeners: function () {
       var that = this
       var slidesContainer = this.slidesContainer
-      function proxyListener (event) {
+
+      function proxyListener(event) {
         var type =
-          that.support.transition && that.support.transition.end === event.type
-            ? 'transitionend'
-            : event.type
+          that.support.transition && that.support.transition.end === event.type ?
+          'transitionend' :
+          event.type
         that['on' + type](event)
       }
       $(window).on('resize', proxyListener)
@@ -1169,7 +1163,8 @@ define([
 
     initWidget: function () {
       var that = this
-      function openHandler (event) {
+
+      function openHandler(event) {
         if (event.target === that.container[0]) {
           that.container.off(that.support.transition.end, openHandler)
           that.handleOpen()
@@ -1217,7 +1212,7 @@ define([
 
     initOptions: function (options) {
       // Create a copy of the prototype options:
-      this.overrided(langx.mixin({}, SliderView.prototype.options,options));
+      this.overrided(langx.mixin({}, SliderView.prototype.options, options));
 
       if (this.num < 3) {
         // 1 or 2 slides cannot be displayed continuous,
@@ -1233,19 +1228,19 @@ define([
     }
   });
 
-  Album.installPlugin("views",{
-    "name" :  "slider",
-    "ctor" :  SliderView,
-    "templates" : {
-      "default" : '<div class="slides"></div>' +
-                  '<h3 class="title"></h3>' +
-                  '<a class="prev">‹</a>' +
-                  '<a class="next">›</a>' +
-                  '<a class="close">×</a>' + 
-                  '<a class="play-pause"></a>' +
-                  '<ol class="indicator"></ol>'
+  Album.installPlugin("views", {
+    "name": "slider",
+    "ctor": SliderView,
+    "templates": {
+      "default": '<div class="slides"></div>' +
+        '<h3 class="title"></h3>' +
+        '<a class="prev">‹</a>' +
+        '<a class="next">›</a>' +
+        '<a class="close">×</a>' +
+        '<a class="play-pause"></a>' +
+        '<ol class="indicator"></ol>'
 
-    } 
+    }
   });
 
   return Album.SliderView = SliderView;

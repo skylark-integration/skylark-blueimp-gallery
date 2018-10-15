@@ -4,13 +4,13 @@ define([
   "skylark-utils/query",
   '../../Album',
   './video'
-],function(langx,noder, $,Album,video) {
+], function (langx, noder, $, Album, video) {
   'use strict'
 
   var YouTubePlayer = langx.Evented.inherit({
-    klassName : "YouTubePlayer",
+    klassName: "YouTubePlayer",
 
-    init : function (videoId, playerVars, clickToPlay) {
+    init: function (videoId, playerVars, clickToPlay) {
       this.videoId = videoId;
       this.playerVars = playerVars;
       this.clickToPlay = clickToPlay;
@@ -23,11 +23,11 @@ define([
 
     loadAPI: function () {
       var that = this,
-          onYouTubeIframeAPIReady = window.onYouTubeIframeAPIReady,
-          apiUrl = 'https://www.youtube.com/iframe_api',
-          scriptTags = document.getElementsByTagName('script'),
-          i = scriptTags.length,
-          scriptTag;
+        onYouTubeIframeAPIReady = window.onYouTubeIframeAPIReady,
+        apiUrl = 'https://www.youtube.com/iframe_api',
+        scriptTags = document.getElementsByTagName('script'),
+        i = scriptTags.length,
+        scriptTag;
 
       window.onYouTubeIframeAPIReady = function () {
         if (onYouTubeIframeAPIReady) {
@@ -93,7 +93,7 @@ define([
     },
 
     onError: function (event) {
-      this.trigger("error",event);
+      this.trigger("error", event);
     },
 
     play: function () {
@@ -154,11 +154,11 @@ define([
 
 
   var YouTubeItemFactory = video.ctor.inherit({
-    klassName : "YouTubeItemFactory",
+    klassName: "YouTubeItemFactory",
 
     YouTubePlayer: YouTubePlayer,
-    
-    options : {
+
+    options: {
       // The list object property (or data attribute) with the YouTube video id:
       youTubeVideoIdProperty: 'youtube',
       // Optional object with parameters passed to the YouTube video player:
@@ -170,12 +170,12 @@ define([
       youTubeClickToPlay: true
     },
 
-    initOptions : function(options) {
+    initOptions: function (options) {
       this.overrided();
-      this.options = langx.mixin(this.options,YouTubeItemFactory.prototype.options,options);
+      this.options = langx.mixin(this.options, YouTubeItemFactory.prototype.options, options);
     },
 
-    render : function (obj, callback) {
+    render: function (obj, callback) {
       var options = this.options
       var videoId = this.getItemProperty(obj, options.youTubeVideoIdProperty)
       if (videoId) {
@@ -202,12 +202,12 @@ define([
   });
 
   var pluginInfo = {
-    name : "youtube",
-    mimeType : "youtube", 
-    ctor :  YouTubeItemFactory
-    };
+    name: "youtube",
+    mimeType: "youtube",
+    ctor: YouTubeItemFactory
+  };
 
-  Album.installPlugin("items",pluginInfo);
+  Album.installPlugin("items", pluginInfo);
 
   return pluginInfo;
 });

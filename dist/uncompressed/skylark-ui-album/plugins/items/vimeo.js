@@ -4,13 +4,13 @@ define([
   "skylark-utils/query",
   '../../Album',
   './video'
-],function(langx,noder, $,Album,video) {
+], function (langx, noder, $, Album, video) {
   'use strict'
 
   var VimeoPlayer = langx.Evented.inherit({
-    klassName : "VimeoPlayer",
+    klassName: "VimeoPlayer",
 
-    init : function (url, videoId, playerId, clickToPlay) {
+    init: function (url, videoId, playerId, clickToPlay) {
       this.url = url
       this.videoId = videoId
       this.playerId = playerId
@@ -35,7 +35,8 @@ define([
       var i = scriptTags.length
       var scriptTag
       var called
-      function callback () {
+
+      function callback() {
         if (!called && that.playOnReady) {
           that.play()
         }
@@ -150,29 +151,28 @@ define([
   var counter = 0;
 
   var VimeoItemFactory = video.ctor.inherit({
-    klassName : "VimeoItemFactory",
+    klassName: "VimeoItemFactory",
 
     VimeoPlayer: VimeoPlayer,
-    
-    options : {
+
+    options: {
       // The list object property (or data attribute) with the Vimeo video id:
       vimeoVideoIdProperty: 'vimeo',
       // The URL for the Vimeo video player, can be extended with custom parameters:
       // https://developer.vimeo.com/player/embedding
-      vimeoPlayerUrl:
-        '//player.vimeo.com/video/VIDEO_ID?api=1&player_id=PLAYER_ID',
+      vimeoPlayerUrl: '//player.vimeo.com/video/VIDEO_ID?api=1&player_id=PLAYER_ID',
       // The prefix for the Vimeo video player ID:
       vimeoPlayerIdPrefix: 'vimeo-player-',
       // Require a click on the native Vimeo player for the initial playback:
       vimeoClickToPlay: true
     },
 
-    initOptions : function(options) {
+    initOptions: function (options) {
       this.overrided();
-      this.options = langx.mixin(this.options,VimeoItemFactory.prototype.options,options);
+      this.options = langx.mixin(this.options, VimeoItemFactory.prototype.options, options);
     },
 
-    render : function (obj, callback) {
+    render: function (obj, callback) {
       var options = this.options
       var videoId = this.getItemProperty(obj, options.vimeoVideoIdProperty)
       if (videoId) {
@@ -195,12 +195,12 @@ define([
   });
 
   var pluginInfo = {
-    name : "vimeo",
-    mimeType : "vimeo", 
-    ctor :  VimeoItemFactory
-    };
+    name: "vimeo",
+    mimeType: "vimeo",
+    ctor: VimeoItemFactory
+  };
 
-  Album.installPlugin("items",pluginInfo);
+  Album.installPlugin("items", pluginInfo);
 
   return pluginInfo;
 

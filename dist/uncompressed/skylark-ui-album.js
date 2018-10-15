@@ -81,402 +81,387 @@
 })(function(define,require) {
 
 define('skylark-ui-album/Album',[
-    "skylark-langx/skylark",
-    "skylark-langx/langx",
-    "skylark-utils/noder",
-    "skylark-utils/widgets"
-], function(skylark, langx, noder, widgets) {
+	"skylark-langx/skylark",
+	"skylark-langx/langx",
+	"skylark-utils/noder",
+	"skylark-utils/widgets"
+], function (skylark, langx, noder, widgets) {
 	var registry = {
-		views : [],
-		items : []
+		views: [],
+		items: []
 	};
-
 	var Album = widgets.Widget.inherit({
-		klassName : "Album",
-
-	    options : {
-		 
- 	      // The list object property (or data attribute) with the object type:
-	      typeProperty: 'type',
-	      // The list object property (or data attribute) with the object title:
-	      titleProperty: 'title',
-	      // The list object property (or data attribute) with the object alt text:
-	      altTextProperty: 'alt',
-	      // The list object property (or data attribute) with the object URL:
-	      urlProperty: 'href',
-	      // The list object property (or data attribute) with the object srcset URL(s):
-	      srcsetProperty: 'urlset',	    	
-	    },
-
+		klassName: "Album",
+		options: {
+			// The list object property (or data attribute) with the object type:
+			typeProperty: 'type',
+			// The list object property (or data attribute) with the object title:
+			titleProperty: 'title',
+			// The list object property (or data attribute) with the object alt text:
+			altTextProperty: 'alt',
+			// The list object property (or data attribute) with the object URL:
+			urlProperty: 'href',
+			// The list object property (or data attribute) with the object srcset URL(s):
+			srcsetProperty: 'urlset',
+		},
+		
 		/*
 		 * @param {Element} el The container element. 
 		 */
-		init : function(el,options) {
+		init: function (el, options) {
 			//this.overrided(el,options);	
 			this.$el = $(el);
 			this.el = this.$el[0];
-			this.options = langx.mixin({},Album.prototype.options,options);
+			this.options = langx.mixin({}, Album.prototype.options, options);
 			this._itemFactories = {
 
 			};
 			this.items = this.options.items;
-			this.setViewMode(this.options.view.mode,this.options.view.options);
+			this.setViewMode(this.options.view.mode, this.options.view.options);
 		},
 
-		setViewMode : function(mode,options) {
+		setViewMode: function (mode, options) {
 			this.viewMode = mode;
-      		for (var i =0 ;i<registry.views.length;i++) {
-      			if (registry.views[i].name === mode) {
-      				this.view = new registry.views[i].ctor(this,options);
-      				break;
-      			}
-      		}
+			for (var i = 0; i < registry.views.length; i++) {
+				if (registry.views[i].name === mode) {
+					this.view = new registry.views[i].ctor(this, options);
+					break;
+				}
+			}
 		},
 
-		getItemUrl : function(item) {
-			return Album.getItemProperty(item,this.options.urlProperty);
+		getItemUrl: function (item) {
+			return Album.getItemProperty(item, this.options.urlProperty);
 		},
 
-		getItemTitle : function(item) {
-			return Album.getItemProperty(item,this.options.titleProperty);
+		getItemTitle: function (item) {
+			return Album.getItemProperty(item, this.options.titleProperty);
 		},
 
-	    addItems: function (items) {
-	      var i
-	      if (!items.concat) {
-	        // Make a real array out of the items to add:
-	        items = Array.prototype.slice.call(items);
-	      }
-	      if (!this.items.concat) {
-	        // Make a real array out of the Gallery items:
-	        this.items = Array.prototype.slice.call(this.items);
-	      }
-	      this.items = this.items.concat(items);
-	      this.num = this.items.length;
-	      this.trigger("itemsChanged");
-	    },
+		addItems: function (items) {
+			var i
+			if (!items.concat) {
+				// Make a real array out of the items to add:
+				items = Array.prototype.slice.call(items);
+			}
+			if (!this.items.concat) {
+				// Make a real array out of the Gallery items:
+				this.items = Array.prototype.slice.call(this.items);
+			}
+			this.items = this.items.concat(items);
+			this.num = this.items.length;
+			this.trigger("itemsChanged");
+		},
 
-	    renderItem : function(item,callback) {
-		      var type = item && Album.getItemProperty(item, this.options.typeProperty);
+		renderItem: function (item, callback) {
+			var type = item && Album.getItemProperty(item, this.options.typeProperty);
 
-		      if (type) {
-		      	type = type.split('/')[0];
-		      }
+			if (type) {
+				type = type.split('/')[0];
+			}
 
-		      if (!type) {
-		      	//throw new Error("no type ");
-		      	type = "image";
-		      }
+			if (!type) {
+				//throw new Error("no type ");
+				type = "image";
+			}
 
-	      	var factory = this._itemFactories[type];
+			var factory = this._itemFactories[type];
 
-	      	if (!factory) {
-	      		for (var i =0 ;i<registry.items.length;i++) {
-	      			if (registry.items[i].mimeType === type) {
-	      				factory = this._itemFactories[type] = new registry.items[i].ctor(this);
-	      				break;
-	      			}
-	      		}
-	      	}
+			if (!factory) {
+				for (var i = 0; i < registry.items.length; i++) {
+					if (registry.items[i].mimeType === type) {
+						factory = this._itemFactories[type] = new registry.items[i].ctor(this);
+						break;
+					}
+				}
+			}
 
-	      	if (!factory) {
-	      		throw new Error ("invalid type:" + type);
-	      	}
-		    
-		    var element = factory.render(item,callback);
-		    var srcset = Album.getItemProperty(item, this.options.srcsetProperty)
-		    if (srcset) {
-		      element.setAttribute('srcset', srcset)
-		    }
-		    return element;
-	    },
+			if (!factory) {
+				throw new Error("invalid type:" + type);
+			}
 
-	    /*
-	     * Check whether a item is runnable.
-	     * @param {Object} item The item object
-	     * @return {Boolean}
-	     */
-	    isRunnable : function(item) {
+			var element = factory.render(item, callback);
+			var srcset = Album.getItemProperty(item, this.options.srcsetProperty)
+			if (srcset) {
+				element.setAttribute('srcset', srcset)
+			}
+			return element;
+		},
 
-	    },
+		/*
+		 * Check whether a item is runnable.
+		 * @param {Object} item The item object
+		 * @return {Boolean}
+		 */
+		isRunnable: function (item) {
 
-	    playItem : function(item) {
+		},
 
-	    }
+		playItem: function (item) {
+
+		}
 
 	});
 
+	langx.mixin(Album, {
+		getNestedProperty: function (obj, property) {
+			property.replace(
+				// Matches native JavaScript notation in a String,
+				// e.g. '["doubleQuoteProp"].dotProp[2]'
+				// eslint-disable-next-line no-useless-escape
+				/\[(?:'([^']+)'|"([^"]+)"|(\d+))\]|(?:(?:^|\.)([^\.\[]+))/g,
+				function (str, singleQuoteProp, doubleQuoteProp, arrayIndex, dotProp) {
+					var prop =
+						dotProp ||
+						singleQuoteProp ||
+						doubleQuoteProp ||
+						(arrayIndex && parseInt(arrayIndex, 10))
+					if (str && obj) {
+						obj = obj[prop]
+					}
+				}
+			)
+			return obj
+		},
 
-	langx.mixin(Album,{
-	    getNestedProperty: function (obj, property) {
-	      property.replace(
-	        // Matches native JavaScript notation in a String,
-	        // e.g. '["doubleQuoteProp"].dotProp[2]'
-	        // eslint-disable-next-line no-useless-escape
-	        /\[(?:'([^']+)'|"([^"]+)"|(\d+))\]|(?:(?:^|\.)([^\.\[]+))/g,
-	        function (str, singleQuoteProp, doubleQuoteProp, arrayIndex, dotProp) {
-	          var prop =
-	            dotProp ||
-	            singleQuoteProp ||
-	            doubleQuoteProp ||
-	            (arrayIndex && parseInt(arrayIndex, 10))
-	          if (str && obj) {
-	            obj = obj[prop]
-	          }
-	        }
-	      )
-	      return obj
-	    },
+		getDataProperty: function (obj, property) {
+			var key
+			var prop
+			if (obj.dataset) {
+				key = property.replace(/-([a-z])/g, function (_, b) {
+					return b.toUpperCase()
+				})
+				prop = obj.dataset[key]
+			} else if (obj.getAttribute) {
+				prop = obj.getAttribute(
+					'data-' + property.replace(/([A-Z])/g, '-$1').toLowerCase()
+				)
+			}
+			if (typeof prop === 'string') {
+				// eslint-disable-next-line no-useless-escape
+				if (
+					/^(true|false|null|-?\d+(\.\d+)?|\{[\s\S]*\}|\[[\s\S]*\])$/.test(prop)
+				) {
+					try {
+						return $.parseJSON(prop)
+					} catch (ignore) {}
+				}
+				return prop
+			}
+		},
 
-	    getDataProperty: function (obj, property) {
-	      var key
-	      var prop
-	      if (obj.dataset) {
-	        key = property.replace(/-([a-z])/g, function (_, b) {
-	          return b.toUpperCase()
-	        })
-	        prop = obj.dataset[key]
-	      } else if (obj.getAttribute) {
-	        prop = obj.getAttribute(
-	          'data-' + property.replace(/([A-Z])/g, '-$1').toLowerCase()
-	        )
-	      }
-	      if (typeof prop === 'string') {
-	        // eslint-disable-next-line no-useless-escape
-	        if (
-	          /^(true|false|null|-?\d+(\.\d+)?|\{[\s\S]*\}|\[[\s\S]*\])$/.test(prop)
-	        ) {
-	          try {
-	            return $.parseJSON(prop)
-	          } catch (ignore) {}
-	        }
-	        return prop
-	      }
-	    },
-
-	    getItemProperty: function (obj, property) {
-	      var prop = this.getDataProperty(obj, property)
-	      if (prop === undefined) {
-	        prop = obj[property]
-	      }
-	      if (prop === undefined) {
-	        prop = this.getNestedProperty(obj, property)
-	      }
-	      return prop
-	    }
+		getItemProperty: function (obj, property) {
+			var prop = this.getDataProperty(obj, property)
+			if (prop === undefined) {
+				prop = obj[property]
+			}
+			if (prop === undefined) {
+				prop = this.getNestedProperty(obj, property)
+			}
+			return prop
+		}
 
 	});
 
 	var ViewBase = Album.ViewBase = langx.Evented.inherit({
-	    klassName : "ViewBase",
+		klassName: "ViewBase",
 
-	    options : {
-	      // The class to add when the gallery controls are visible:
-	      controlsClass: 'skylarkui-album-controls',
-		  // Defines if the gallery should open in fullscreen mode:
-		  fullScreen: false
+		options: {
+			// The class to add when the gallery controls are visible:
+			controlsClass: 'skylarkui-album-controls',
+			// Defines if the gallery should open in fullscreen mode:
+			fullScreen: false
 
-	    },
+		},
 
-		init : function(album,options) {
+		init: function (album, options) {
 			var that = this,
 				hasControls;
 			this.album = album;
 			this.initOptions(options);
-	        if (this.options.fullScreen) {
-	          noder.fullScreen(this.container[0]);
-	        }
-	        this.album.on("item.running",function(e){
-	            if (that.container.hasClass(that.options.controlsClass)) {
-	              hasControls = true
-	              that.container.removeClass(that.options.controlsClass);
-	            } else {
-	              hasControls = false
-	            }
-	        });
+			if (this.options.fullScreen) {
+				noder.fullScreen(this.container[0]);
+			}
+			this.album.on("item.running", function (e) {
+				if (that.container.hasClass(that.options.controlsClass)) {
+					hasControls = true
+					that.container.removeClass(that.options.controlsClass);
+				} else {
+					hasControls = false
+				}
+			});
 
-	        this.album.on("item.running",function(e){
-	            if (hasControls) {
-	              that.container.addClass(that.options.controlsClass);
-	            }
-	        });
+			this.album.on("item.running", function (e) {
+				if (hasControls) {
+					that.container.addClass(that.options.controlsClass);
+				}
+			});
 		},
 
-	    initOptions: function (options) {
-	      // Create a copy of the prototype options:
-	      this.options = langx.mixin({}, ViewBase.prototype.options,options);
-	    },
+		initOptions: function (options) {
+			// Create a copy of the prototype options:
+			this.options = langx.mixin({}, ViewBase.prototype.options, options);
+		},
 
-	    close: function () {
-      		if (noder.fullScreen() === this.container[0]) {
-        		noder.fullScreen(false);
-      		}
-      	}
+		close: function () {
+			if (noder.fullScreen() === this.container[0]) {
+				noder.fullScreen(false);
+			}
+		}
 	});
 
-	var ItemFactoryBase = Album.ItemFactoryBase =  langx.Evented.inherit({
-	    klassName : "ItemFactoryBase",
+	var ItemFactoryBase = Album.ItemFactoryBase = langx.Evented.inherit({
+		klassName: "ItemFactoryBase",
 
-	    options : {
-	      // The list object property (or data attribute) with the object type:
-	      typeProperty: 'type',
-	      // The list object property (or data attribute) with the object title:
-	      titleProperty: 'title',
-	      // The list object property (or data attribute) with the object alt text:
-	      altTextProperty: 'alt',
-	      // The list object property (or data attribute) with the object URL:
-	      urlProperty: 'href',
-	      // The list object property (or data attribute) with the object srcset URL(s):
-	      srcsetProperty: 'urlset',	    	
-	    },
+		options: {
+			// The list object property (or data attribute) with the object type:
+			typeProperty: 'type',
+			// The list object property (or data attribute) with the object title:
+			titleProperty: 'title',
+			// The list object property (or data attribute) with the object alt text:
+			altTextProperty: 'alt',
+			// The list object property (or data attribute) with the object URL:
+			urlProperty: 'href',
+			// The list object property (or data attribute) with the object srcset URL(s):
+			srcsetProperty: 'urlset',
+		},
 
-		init : function(album,options) {
+		init: function (album, options) {
 			this.album = album;
 			this.initOptions(options);
 		},
 
-	    initOptions: function (options) {
-	      // Create a copy of the prototype options:
-	      this.options = langx.mixin({}, ItemFactoryBase.prototype.options,options);
-	    },
+		initOptions: function (options) {
+			// Create a copy of the prototype options:
+			this.options = langx.mixin({}, ItemFactoryBase.prototype.options, options);
+		},
 
+		setTimeout: function (func, args, wait) {
+			var that = this
+			return (
+				func &&
+				window.setTimeout(function () {
+					func.apply(that, args || [])
+				}, wait || 0)
+			)
+		},
 
-	    setTimeout: function (func, args, wait) {
-	      var that = this
-	      return (
-	        func &&
-	        window.setTimeout(function () {
-	          func.apply(that, args || [])
-	        }, wait || 0)
-	      )
-	    },	    
+		getNestedProperty: Album.getNestedProperty,
 
-	    getNestedProperty: Album.getNestedProperty,
+		getDataProperty: Album.getDataProperty,
 
-	    getDataProperty: Album.getDataProperty,
-
-	    getItemProperty: Album.getItemProperty
+		getItemProperty: Album.getItemProperty
 	});
-	
 
-	Album.installPlugin = function(pointer,setting) {
+	Album.installPlugin = function (pointer, setting) {
 		var plugins = registry[pointer];
 		if (!plugins) {
 			throw new Error("Invalid paramerter!");
 		}
-
 		plugins.push(setting);
 	};
-
-
 	var ui = skylark.ui = skylark.ui || {};
-
-    return ui.Album = Album;
-})
-;
+	return ui.Album = Album;
+});
 /* global define, window, document */
 
 define('skylark-ui-album/helper',[
   "skylark-utils/langx",
   "skylark-utils/query"
-],function (langx,q) {
+], function (langx, q) {
   'use strict'
-
   q.extend = langx.mixin;
-
   return q;
 });
-
 define('skylark-ui-album/plugins/items/image',[
-  "skylark-langx/langx",
-  "skylark-utils/noder",
-  "skylark-utils/query",
-  '../../Album',
-],function(langx,noder, $,Album) {
-
+	"skylark-langx/langx",
+	"skylark-utils/noder",
+	"skylark-utils/query",
+	'../../Album',
+], function (langx, noder, $, Album) {
 	var ImageItemFactory = Album.ItemFactoryBase.inherit({
-		klassName : "ImageItemFactory",
-	    options : {
-	      // Defines if images should be stretched to fill the available space,
-	      // while maintaining their aspect ratio (will only be enabled for browsers
-	      // supporting background-size="contain", which excludes IE < 9).
-	      // Set to "cover", to make images cover all available space (requires
-	      // support for background-size="cover", which excludes IE < 9):
-	      stretchImages: false
-	    },
-
-		initOptions : function(options) {
-			this.overrided();
-			this.options = langx.mixin(this.options,ImageItemFactory.prototype.options,options);
+		klassName: "ImageItemFactory",
+		options: {
+			// Defines if images should be stretched to fill the available space,
+			// while maintaining their aspect ratio (will only be enabled for browsers
+			// supporting background-size="contain", which excludes IE < 9).
+			// Set to "cover", to make images cover all available space (requires
+			// support for background-size="cover", which excludes IE < 9):
+			stretchImages: false
 		},
 
-	    render : function (obj, callback) {
-	      var that = this,
-	      	  img = noder.createElement("img"),
-	      	  album = this.album,
-	      	  url = obj,
-	      	  backgroundSize = this.options.stretchImages,
-	          called,
-	          element,
-	          title,
-	          altText;
+		initOptions: function (options) {
+			this.overrided();
+			this.options = langx.mixin(this.options, ImageItemFactory.prototype.options, options);
+		},
 
-	      function callbackWrapper (event) {
-	        if (!called) {
-	          event = {
-	            type: event.type,
-	            target: element
-	          }
+		render: function (obj, callback) {
+			var that = this,
+				img = noder.createElement("img"),
+				album = this.album,
+				url = obj,
+				backgroundSize = this.options.stretchImages,
+				called,
+				element,
+				title,
+				altText;
 
-	          called = true
-	          $(img).off('load error', callbackWrapper)
-	          if (backgroundSize) {
-	            if (event.type === 'load') {
-	              element.style.background = 'url("' + url + '") center no-repeat'
-	              element.style.backgroundSize = backgroundSize
-	            }
-	          }
-	          callback(event)
-	        }
-	      }
-	      if (typeof url !== 'string') {
-	        url = this.getItemProperty(obj, this.options.urlProperty);
-	        title = this.getItemProperty(obj, this.options.titleProperty);
-	        altText =
-	          this.getItemProperty(obj, this.options.altTextProperty) || title;
-	      }
-	      if (backgroundSize === true) {
-	        backgroundSize = 'contain';
-	      }
-	      if (backgroundSize) {
-	        element = noder.createElement("div");
-	      } else {
-	        element = img;
-	        img.draggable = false;
-	      }
-	      if (title) {
-	        element.title = title;
-	      }
-	      if (altText) {
-	        element.alt = altText;
-	      }
-	      $(img).on('load error', callbackWrapper);
-	      img.src = url
-	      return element;
-	    }
+			function callbackWrapper(event) {
+				if (!called) {
+					event = {
+						type: event.type,
+						target: element
+					}
+
+					called = true
+					$(img).off('load error', callbackWrapper)
+					if (backgroundSize) {
+						if (event.type === 'load') {
+							element.style.background = 'url("' + url + '") center no-repeat'
+							element.style.backgroundSize = backgroundSize
+						}
+					}
+					callback(event)
+				}
+			}
+			if (typeof url !== 'string') {
+				url = this.getItemProperty(obj, this.options.urlProperty);
+				title = this.getItemProperty(obj, this.options.titleProperty);
+				altText =
+					this.getItemProperty(obj, this.options.altTextProperty) || title;
+			}
+			if (backgroundSize === true) {
+				backgroundSize = 'contain';
+			}
+			if (backgroundSize) {
+				element = noder.createElement("div");
+			} else {
+				element = img;
+				img.draggable = false;
+			}
+			if (title) {
+				element.title = title;
+			}
+			if (altText) {
+				element.alt = altText;
+			}
+			$(img).on('load error', callbackWrapper);
+			img.src = url
+			return element;
+		}
 
 	});
 
 	var pluginInfo = {
-		name : "image",
-		mimeType : "image", 
-		ctor :  ImageItemFactory
-  	};
+		name: "image",
+		mimeType: "image",
+		ctor: ImageItemFactory
+	};
 
-	Album.installPlugin("items",pluginInfo);
+	Album.installPlugin("items", pluginInfo);
 
 	return pluginInfo;
-	
+
 });
 define('skylark-ui-album/plugins/items/video',[
   "skylark-langx/langx",
@@ -484,14 +469,14 @@ define('skylark-ui-album/plugins/items/video',[
   "skylark-utils/eventer",
   "skylark-utils/query",
   '../../Album',
-],function(langx,noder, eventer,$ ,Album) {
+], function (langx, noder, eventer, $, Album) {
 
   'use strict'
 
   var VideoItemFactory = Album.ItemFactoryBase.inherit({
-    klassName : "VideoItemFactory",
+    klassName: "VideoItemFactory",
 
-    options : {
+    options: {
       // The class for video content elements:
       videoContentClass: 'video-content',
       // The class for video when it is loading:
@@ -504,9 +489,9 @@ define('skylark-ui-album/plugins/items/video',[
       videoSourcesProperty: 'sources'
     },
 
-    initOptions : function(options) {
+    initOptions: function (options) {
       this.overrided();
-      this.options = langx.mixin(this.options,VideoItemFactory.prototype.options,options);
+      this.options = langx.mixin(this.options, VideoItemFactory.prototype.options, options);
     },
 
     handleSlide: function (index) {
@@ -516,17 +501,15 @@ define('skylark-ui-album/plugins/items/video',[
       }
     },
 
-    render : function(obj, callback, videoInterface) {
+    render: function (obj, callback, videoInterface) {
       var that = this
       var options = this.options
       var videoContainerNode = noder.createElement("div")
       var videoContainer = $(videoContainerNode)
-      var errorArgs = [
-        {
-          type: 'error',
-          target: videoContainerNode
-        }
-      ]
+      var errorArgs = [{
+        type: 'error',
+        target: videoContainerNode
+      }]
       var video = videoInterface || document.createElement('video')
       var url = this.getItemProperty(obj, options.urlProperty)
       var type = this.getItemProperty(obj, options.typeProperty)
@@ -575,9 +558,9 @@ define('skylark-ui-album/plugins/items/video',[
       }
       playMediaControl.href = url
       if (video.src) {
-        video.controls = true
-        ;(videoInterface || $(video))
-          .on('error', function () {
+        video.controls = true;
+        (videoInterface || $(video))
+        .on('error', function () {
             that.setTimeout(callback, errorArgs)
           })
           .on('pause', function () {
@@ -586,8 +569,8 @@ define('skylark-ui-album/plugins/items/video',[
             videoContainer
               .removeClass(that.options.videoLoadingClass)
               .removeClass(that.options.videoPlayingClass)
-            that.album.trigger("item.pause",{
-              item : that
+            that.album.trigger("item.pause", {
+              item: that
             });
             delete that.playingVideo
             if (that.interval) {
@@ -600,8 +583,8 @@ define('skylark-ui-album/plugins/items/video',[
               .removeClass(that.options.videoLoadingClass)
               .addClass(that.options.videoPlayingClass);
 
-            that.album.trigger("item.running",{
-              item : that
+            that.album.trigger("item.running", {
+              item: that
             });
           })
           .on('play', function () {
@@ -610,8 +593,8 @@ define('skylark-ui-album/plugins/items/video',[
             videoContainer.addClass(that.options.videoLoadingClass)
             that.playingVideo = video
 
-            that.album.trigger("item.run",{
-              item : that
+            that.album.trigger("item.run", {
+              item: that
             });
           })
         $(playMediaControl).on('click', function (event) {
@@ -627,12 +610,10 @@ define('skylark-ui-album/plugins/items/video',[
         )
       }
       videoContainerNode.appendChild(playMediaControl)
-      this.setTimeout(callback, [
-        {
-          type: 'load',
-          target: videoContainerNode
-        }
-      ])
+      this.setTimeout(callback, [{
+        type: 'load',
+        target: videoContainerNode
+      }])
       return videoContainerNode
 
     }
@@ -642,30 +623,29 @@ define('skylark-ui-album/plugins/items/video',[
 
 
   var pluginInfo = {
-    name : "video",
-    mimeType : "video",
-    ctor : VideoItemFactory
+    name: "video",
+    mimeType: "video",
+    ctor: VideoItemFactory
   };
 
-  Album.installPlugin("items",pluginInfo);
+  Album.installPlugin("items", pluginInfo);
 
   return pluginInfo;
 
 });
-
 define('skylark-ui-album/plugins/items/vimeo',[
   "skylark-langx/langx",
   "skylark-utils/noder",
   "skylark-utils/query",
   '../../Album',
   './video'
-],function(langx,noder, $,Album,video) {
+], function (langx, noder, $, Album, video) {
   'use strict'
 
   var VimeoPlayer = langx.Evented.inherit({
-    klassName : "VimeoPlayer",
+    klassName: "VimeoPlayer",
 
-    init : function (url, videoId, playerId, clickToPlay) {
+    init: function (url, videoId, playerId, clickToPlay) {
       this.url = url
       this.videoId = videoId
       this.playerId = playerId
@@ -690,7 +670,8 @@ define('skylark-ui-album/plugins/items/vimeo',[
       var i = scriptTags.length
       var scriptTag
       var called
-      function callback () {
+
+      function callback() {
         if (!called && that.playOnReady) {
           that.play()
         }
@@ -805,29 +786,28 @@ define('skylark-ui-album/plugins/items/vimeo',[
   var counter = 0;
 
   var VimeoItemFactory = video.ctor.inherit({
-    klassName : "VimeoItemFactory",
+    klassName: "VimeoItemFactory",
 
     VimeoPlayer: VimeoPlayer,
-    
-    options : {
+
+    options: {
       // The list object property (or data attribute) with the Vimeo video id:
       vimeoVideoIdProperty: 'vimeo',
       // The URL for the Vimeo video player, can be extended with custom parameters:
       // https://developer.vimeo.com/player/embedding
-      vimeoPlayerUrl:
-        '//player.vimeo.com/video/VIDEO_ID?api=1&player_id=PLAYER_ID',
+      vimeoPlayerUrl: '//player.vimeo.com/video/VIDEO_ID?api=1&player_id=PLAYER_ID',
       // The prefix for the Vimeo video player ID:
       vimeoPlayerIdPrefix: 'vimeo-player-',
       // Require a click on the native Vimeo player for the initial playback:
       vimeoClickToPlay: true
     },
 
-    initOptions : function(options) {
+    initOptions: function (options) {
       this.overrided();
-      this.options = langx.mixin(this.options,VimeoItemFactory.prototype.options,options);
+      this.options = langx.mixin(this.options, VimeoItemFactory.prototype.options, options);
     },
 
-    render : function (obj, callback) {
+    render: function (obj, callback) {
       var options = this.options
       var videoId = this.getItemProperty(obj, options.vimeoVideoIdProperty)
       if (videoId) {
@@ -850,30 +830,29 @@ define('skylark-ui-album/plugins/items/vimeo',[
   });
 
   var pluginInfo = {
-    name : "vimeo",
-    mimeType : "vimeo", 
-    ctor :  VimeoItemFactory
-    };
+    name: "vimeo",
+    mimeType: "vimeo",
+    ctor: VimeoItemFactory
+  };
 
-  Album.installPlugin("items",pluginInfo);
+  Album.installPlugin("items", pluginInfo);
 
   return pluginInfo;
 
 });
-
 define('skylark-ui-album/plugins/items/youtube',[
   "skylark-langx/langx",
   "skylark-utils/noder",
   "skylark-utils/query",
   '../../Album',
   './video'
-],function(langx,noder, $,Album,video) {
+], function (langx, noder, $, Album, video) {
   'use strict'
 
   var YouTubePlayer = langx.Evented.inherit({
-    klassName : "YouTubePlayer",
+    klassName: "YouTubePlayer",
 
-    init : function (videoId, playerVars, clickToPlay) {
+    init: function (videoId, playerVars, clickToPlay) {
       this.videoId = videoId;
       this.playerVars = playerVars;
       this.clickToPlay = clickToPlay;
@@ -886,11 +865,11 @@ define('skylark-ui-album/plugins/items/youtube',[
 
     loadAPI: function () {
       var that = this,
-          onYouTubeIframeAPIReady = window.onYouTubeIframeAPIReady,
-          apiUrl = 'https://www.youtube.com/iframe_api',
-          scriptTags = document.getElementsByTagName('script'),
-          i = scriptTags.length,
-          scriptTag;
+        onYouTubeIframeAPIReady = window.onYouTubeIframeAPIReady,
+        apiUrl = 'https://www.youtube.com/iframe_api',
+        scriptTags = document.getElementsByTagName('script'),
+        i = scriptTags.length,
+        scriptTag;
 
       window.onYouTubeIframeAPIReady = function () {
         if (onYouTubeIframeAPIReady) {
@@ -956,7 +935,7 @@ define('skylark-ui-album/plugins/items/youtube',[
     },
 
     onError: function (event) {
-      this.trigger("error",event);
+      this.trigger("error", event);
     },
 
     play: function () {
@@ -1017,11 +996,11 @@ define('skylark-ui-album/plugins/items/youtube',[
 
 
   var YouTubeItemFactory = video.ctor.inherit({
-    klassName : "YouTubeItemFactory",
+    klassName: "YouTubeItemFactory",
 
     YouTubePlayer: YouTubePlayer,
-    
-    options : {
+
+    options: {
       // The list object property (or data attribute) with the YouTube video id:
       youTubeVideoIdProperty: 'youtube',
       // Optional object with parameters passed to the YouTube video player:
@@ -1033,12 +1012,12 @@ define('skylark-ui-album/plugins/items/youtube',[
       youTubeClickToPlay: true
     },
 
-    initOptions : function(options) {
+    initOptions: function (options) {
       this.overrided();
-      this.options = langx.mixin(this.options,YouTubeItemFactory.prototype.options,options);
+      this.options = langx.mixin(this.options, YouTubeItemFactory.prototype.options, options);
     },
 
-    render : function (obj, callback) {
+    render: function (obj, callback) {
       var options = this.options
       var videoId = this.getItemProperty(obj, options.youTubeVideoIdProperty)
       if (videoId) {
@@ -1065,28 +1044,25 @@ define('skylark-ui-album/plugins/items/youtube',[
   });
 
   var pluginInfo = {
-    name : "youtube",
-    mimeType : "youtube", 
-    ctor :  YouTubeItemFactory
-    };
+    name: "youtube",
+    mimeType: "youtube",
+    ctor: YouTubeItemFactory
+  };
 
-  Album.installPlugin("items",pluginInfo);
+  Album.installPlugin("items", pluginInfo);
 
   return pluginInfo;
 });
-
 /* global define, window, document, DocumentTouch */
 
 define('skylark-ui-album/plugins/views/SliderView',[
   'skylark-langx/langx',
   '../../helper',
   '../../Album'
-],function (langx,$,Album) {
+], function (langx, $, Album) {
   'use strict'
-
   var SliderView = Album.ViewBase.inherit({
-    klassName : "SliderView",
-
+    klassName: "SliderView",
     options: {
       // The Id, element or querySelector of the album view:
       container: null,
@@ -1232,17 +1208,16 @@ define('skylark-ui-album/plugins/views/SliderView',[
       startSlideshow: true
     },
     */
-    
-    console:
-      window.console && typeof window.console.log === 'function'
-        ? window.console
-        : { log: function () {} },
+
+    console: window.console && typeof window.console.log === 'function' ?
+      window.console : {
+        log: function () {}
+      },
 
     // Detect touch, transition, transform and background-size support:
     support: (function (element) {
       var support = {
-        touch:
-          window.ontouchstart !== undefined ||
+        touch: window.ontouchstart !== undefined ||
           (window.DocumentTouch && document instanceof DocumentTouch)
       }
       var transitions = {
@@ -1274,7 +1249,8 @@ define('skylark-ui-album/plugins/views/SliderView',[
           break
         }
       }
-      function elementTests () {
+
+      function elementTests() {
         var transition = support.transition
         var prop
         var translateZ
@@ -1299,13 +1275,13 @@ define('skylark-ui-album/plugins/views/SliderView',[
           element.style.backgroundSize = 'contain'
           support.backgroundSize.contain =
             window
-              .getComputedStyle(element)
-              .getPropertyValue('background-size') === 'contain'
+            .getComputedStyle(element)
+            .getPropertyValue('background-size') === 'contain'
           element.style.backgroundSize = 'cover'
           support.backgroundSize.cover =
             window
-              .getComputedStyle(element)
-              .getPropertyValue('background-size') === 'cover'
+            .getComputedStyle(element)
+            .getPropertyValue('background-size') === 'cover'
         }
         document.body.removeChild(element)
       }
@@ -1319,19 +1295,17 @@ define('skylark-ui-album/plugins/views/SliderView',[
       // for the CSS3 tests using window.getComputedStyle to be applicable:
     })(document.createElement('div')),
 
-    requestAnimationFrame:
-      window.requestAnimationFrame ||
+    requestAnimationFrame: window.requestAnimationFrame ||
       window.webkitRequestAnimationFrame ||
       window.mozRequestAnimationFrame,
 
-    cancelAnimationFrame:
-      window.cancelAnimationFrame ||
+    cancelAnimationFrame: window.cancelAnimationFrame ||
       window.webkitCancelRequestAnimationFrame ||
       window.webkitCancelAnimationFrame ||
       window.mozCancelAnimationFrame,
 
-    init: function (album,options){
-      this.overrided(album,options);
+    init: function (album, options) {
+      this.overrided(album, options);
 
       this.list = this.album.items;
       this.options.container = this.album.el;
@@ -1434,14 +1408,14 @@ define('skylark-ui-album/plugins/views/SliderView',[
       if (this.elements[this.index] > 1) {
         this.timeout = this.setTimeout(
           (!this.requestAnimationFrame && this.slide) ||
-            function (to, speed) {
-              that.animationFrameId = that.requestAnimationFrame.call(
-                window,
-                function () {
-                  that.slide(to, speed)
-                }
-              )
-            },
+          function (to, speed) {
+            that.animationFrameId = that.requestAnimationFrame.call(
+              window,
+              function () {
+                that.slide(to, speed)
+              }
+            )
+          },
           [this.index + 1, this.options.slideshowTransitionSpeed],
           this.interval
         )
@@ -1516,7 +1490,8 @@ define('skylark-ui-album/plugins/views/SliderView',[
 
     close: function () {
       var that = this
-      function closeHandler (event) {
+
+      function closeHandler(event) {
         if (event.target === that.container[0]) {
           that.container.off(that.support.transition.end, closeHandler)
           that.handleClose()
@@ -1616,25 +1591,21 @@ define('skylark-ui-album/plugins/views/SliderView',[
       ) {
         // Preventing the default mousedown action is required
         // to make touch emulation work with Firefox:
-        event.preventDefault()
-        ;(event.originalEvent || event).touches = [
-          {
-            pageX: event.pageX,
-            pageY: event.pageY
-          }
-        ]
+        event.preventDefault();
+        (event.originalEvent || event).touches = [{
+          pageX: event.pageX,
+          pageY: event.pageY
+        }]
         this.ontouchstart(event)
       }
     },
 
     onmousemove: function (event) {
-      if (this.touchStart) {
-        ;(event.originalEvent || event).touches = [
-          {
-            pageX: event.pageX,
-            pageY: event.pageY
-          }
-        ]
+      if (this.touchStart) {;
+        (event.originalEvent || event).touches = [{
+          pageX: event.pageX,
+          pageY: event.pageY
+        }]
         this.ontouchmove(event)
       }
     },
@@ -1719,9 +1690,9 @@ define('skylark-ui-album/plugins/views/SliderView',[
           this.touchDelta.x = touchDeltaX =
             touchDeltaX /
             ((!index && touchDeltaX > 0) ||
-            (index === this.num - 1 && touchDeltaX < 0)
-              ? Math.abs(touchDeltaX) / this.slideWidth + 1
-              : 1)
+              (index === this.num - 1 && touchDeltaX < 0) ?
+              Math.abs(touchDeltaX) / this.slideWidth + 1 :
+              1)
           indices = [index]
           if (index) {
             indices.push(index - 1)
@@ -1755,8 +1726,7 @@ define('skylark-ui-album/plugins/views/SliderView',[
       var isPastBounds =
         (!index && this.touchDelta.x > 0) ||
         (index === this.num - 1 && this.touchDelta.x < 0)
-      var isValidClose =
-        !isValidSlide &&
+      var isValidClose = !isValidSlide &&
         this.options.closeOnSwipeUpOrDown &&
         ((isShortDuration && Math.abs(this.touchDelta.y) > 20) ||
           Math.abs(this.touchDelta.y) > this.slideHeight / 2)
@@ -1906,7 +1876,8 @@ define('skylark-ui-album/plugins/views/SliderView',[
       var options = this.options
       var target = event.target || event.srcElement
       var parent = target.parentNode
-      function isTarget (className) {
+
+      function isTarget(className) {
         return $(target).hasClass(className) || $(parent).hasClass(className)
       }
       if (isTarget(options.toggleClass)) {
@@ -2015,7 +1986,7 @@ define('skylark-ui-album/plugins/views/SliderView',[
     },
 
     createElement: function (obj, callback) {
-      var element = this.album.renderItem(obj,callback);
+      var element = this.album.renderItem(obj, callback);
       $(element).addClass(this.options.slideContentClass);
       return element;
     },
@@ -2024,10 +1995,10 @@ define('skylark-ui-album/plugins/views/SliderView',[
       if (!this.elements[index]) {
         if (this.slides[index].firstChild) {
           this.elements[index] = $(this.slides[index]).hasClass(
-            this.options.slideErrorClass
-          )
-            ? 3
-            : 2
+              this.options.slideErrorClass
+            ) ?
+            3 :
+            2
         } else {
           this.elements[index] = 1 // Loading
           $(this.slides[index]).addClass(this.options.slideLoadingClass)
@@ -2085,9 +2056,9 @@ define('skylark-ui-album/plugins/views/SliderView',[
         slide.style.left = index * -this.slideWidth + 'px'
         this.move(
           index,
-          this.index > index
-            ? -this.slideWidth
-            : this.index < index ? this.slideWidth : 0,
+          this.index > index ?
+          -this.slideWidth :
+          this.index < index ? this.slideWidth : 0,
           0
         )
       }
@@ -2170,13 +2141,13 @@ define('skylark-ui-album/plugins/views/SliderView',[
 
     initStartIndex: function () {
       var album = this.album,
-          index = this.options.index;
+        index = this.options.index;
       var i
       // Check if the index is given as a list object:
       if (index && typeof index !== 'number') {
         for (i = 0; i < this.num; i += 1) {
           if (
-            this.list[i] === index || album.getItemUrl(this.list[i]) ===  album.getItemUrl(index) ) {
+            this.list[i] === index || album.getItemUrl(this.list[i]) === album.getItemUrl(index)) {
             index = i
             break
           }
@@ -2189,11 +2160,12 @@ define('skylark-ui-album/plugins/views/SliderView',[
     initEventListeners: function () {
       var that = this
       var slidesContainer = this.slidesContainer
-      function proxyListener (event) {
+
+      function proxyListener(event) {
         var type =
-          that.support.transition && that.support.transition.end === event.type
-            ? 'transitionend'
-            : event.type
+          that.support.transition && that.support.transition.end === event.type ?
+          'transitionend' :
+          event.type
         that['on' + type](event)
       }
       $(window).on('resize', proxyListener)
@@ -2246,7 +2218,8 @@ define('skylark-ui-album/plugins/views/SliderView',[
 
     initWidget: function () {
       var that = this
-      function openHandler (event) {
+
+      function openHandler(event) {
         if (event.target === that.container[0]) {
           that.container.off(that.support.transition.end, openHandler)
           that.handleOpen()
@@ -2294,7 +2267,7 @@ define('skylark-ui-album/plugins/views/SliderView',[
 
     initOptions: function (options) {
       // Create a copy of the prototype options:
-      this.overrided(langx.mixin({}, SliderView.prototype.options,options));
+      this.overrided(langx.mixin({}, SliderView.prototype.options, options));
 
       if (this.num < 3) {
         // 1 or 2 slides cannot be displayed continuous,
@@ -2310,210 +2283,208 @@ define('skylark-ui-album/plugins/views/SliderView',[
     }
   });
 
-  Album.installPlugin("views",{
-    "name" :  "slider",
-    "ctor" :  SliderView,
-    "templates" : {
-      "default" : '<div class="slides"></div>' +
-                  '<h3 class="title"></h3>' +
-                  '<a class="prev">‹</a>' +
-                  '<a class="next">›</a>' +
-                  '<a class="close">×</a>' + 
-                  '<a class="play-pause"></a>' +
-                  '<ol class="indicator"></ol>'
+  Album.installPlugin("views", {
+    "name": "slider",
+    "ctor": SliderView,
+    "templates": {
+      "default": '<div class="slides"></div>' +
+        '<h3 class="title"></h3>' +
+        '<a class="prev">‹</a>' +
+        '<a class="next">›</a>' +
+        '<a class="close">×</a>' +
+        '<a class="play-pause"></a>' +
+        '<ol class="indicator"></ol>'
 
-    } 
+    }
   });
 
   return Album.SliderView = SliderView;
 });
-
 define('skylark-ui-album/plugins/views/CarouselView',[
-  '../../Album',
-  './SliderView'
-],function (Album,SliderView) {
+	'../../Album',
+	'./SliderView'
+], function (Album, SliderView) {
 
 	var CarouselView = SliderView.inherit({
-		klassName : "CarouselView",
+		klassName: "CarouselView",
 
-		options : {
-	      hidePageScrollbars: false,
-	      toggleControlsOnReturn: false,
-	      toggleSlideshowOnSpace: false,
-	      enableKeyboardNavigation: false,
-	      closeOnEscape: false,
-	      closeOnSlideClick: false,
-	      closeOnSwipeUpOrDown: false,
-	      disableScroll: false,
-	      startSlideshow: true			
+		options: {
+			hidePageScrollbars: false,
+			toggleControlsOnReturn: false,
+			toggleSlideshowOnSpace: false,
+			enableKeyboardNavigation: false,
+			closeOnEscape: false,
+			closeOnSlideClick: false,
+			closeOnSwipeUpOrDown: false,
+			disableScroll: false,
+			startSlideshow: true
 		},
 
-	    initOptions: function (options) {
-	    	var options = langx.mixin({},CarouselView.prototype.options,options);
+		initOptions: function (options) {
+			var options = langx.mixin({}, CarouselView.prototype.options, options);
 			this.overrided(options);
-	    }
+		}
 
 	});
 
-	Album.installPlugin("views",{
-		"name" :  "carousel",
-		"ctor" :  CarouselView,
-		"templates" : {
-			"default" : '<div class="slides"></div>' +
-			          '<h3 class="title"></h3>' +
-			          '<a class="prev">‹</a>' +
-			          '<a class="next">›</a>' +
-			          '<a class="close">×</a>' + 
-			          '<a class="play-pause"></a>' +
-			          '<ol class="indicator"></ol>'
+	Album.installPlugin("views", {
+		"name": "carousel",
+		"ctor": CarouselView,
+		"templates": {
+			"default": '<div class="slides"></div>' +
+				'<h3 class="title"></h3>' +
+				'<a class="prev">‹</a>' +
+				'<a class="next">›</a>' +
+				'<a class="close">×</a>' +
+				'<a class="play-pause"></a>' +
+				'<ol class="indicator"></ol>'
 
-		} 
+		}
 	});
 
 	return CarouselView;
 
 });
 define('skylark-ui-album/plugins/views/LightBoxView',[
-  'skylark-langx/langx',
-  '../../Album',
-  './SliderView'
-],function (langx,Album,SliderView) {
+	'skylark-langx/langx',
+	'../../Album',
+	'./SliderView'
+], function (langx, Album, SliderView) {
 
 	var LightBoxView = SliderView.inherit({
-		klassName : "LightBoxView",
-		options : {
-	        // Hide the page scrollbars:
-	        hidePageScrollbars: false,
+		klassName: "LightBoxView",
+		options: {
+			// Hide the page scrollbars:
+			hidePageScrollbars: false,
 
-		    // The tag name, Id, element or querySelector of the indicator container:
-		    indicatorContainer: 'ol',
-		    // The class for the active indicator:
-		    activeIndicatorClass: 'active',
-		    // The list object property (or data attribute) with the thumbnail URL,
-		    // used as alternative to a thumbnail child element:
-		    thumbnailProperty: 'thumbnail',
-		    // Defines if the gallery indicators should display a thumbnail:
-		    thumbnailIndicators: true
+			// The tag name, Id, element or querySelector of the indicator container:
+			indicatorContainer: 'ol',
+			// The class for the active indicator:
+			activeIndicatorClass: 'active',
+			// The list object property (or data attribute) with the thumbnail URL,
+			// used as alternative to a thumbnail child element:
+			thumbnailProperty: 'thumbnail',
+			// Defines if the gallery indicators should display a thumbnail:
+			thumbnailIndicators: true
 		},
 
 
-	    initOptions: function (options) {
-	    	var options = langx.mixin({},LightBoxView.prototype.options,options);
+		initOptions: function (options) {
+			var options = langx.mixin({}, LightBoxView.prototype.options, options);
 			this.overrided(options);
-	    },
+		},
 
-	    createIndicator: function (obj) {
-	      var album = this.album,
-	      		indicator = this.indicatorPrototype.cloneNode(false)
-	      var title = album.getItemTitle(obj)
-	      var thumbnailProperty = this.options.thumbnailProperty
-	      var thumbnailUrl
-	      var thumbnail
-	      if (this.options.thumbnailIndicators) {
-	        if (thumbnailProperty) {
-	          thumbnailUrl = Album.getItemProperty(obj, thumbnailProperty)
-	        }
-	        if (thumbnailUrl === undefined) {
-	          thumbnail = obj.getElementsByTagName && $(obj).find('img')[0]
-	          if (thumbnail) {
-	            thumbnailUrl = thumbnail.src
-	          }
-	        }
-	        if (thumbnailUrl) {
-	          indicator.style.backgroundImage = 'url("' + thumbnailUrl + '")'
-	        }
-	      }
-	      if (title) {
-	        indicator.title = title;
-	      }
-	      return indicator;
-	    },
+		createIndicator: function (obj) {
+			var album = this.album,
+				indicator = this.indicatorPrototype.cloneNode(false)
+			var title = album.getItemTitle(obj)
+			var thumbnailProperty = this.options.thumbnailProperty
+			var thumbnailUrl
+			var thumbnail
+			if (this.options.thumbnailIndicators) {
+				if (thumbnailProperty) {
+					thumbnailUrl = Album.getItemProperty(obj, thumbnailProperty)
+				}
+				if (thumbnailUrl === undefined) {
+					thumbnail = obj.getElementsByTagName && $(obj).find('img')[0]
+					if (thumbnail) {
+						thumbnailUrl = thumbnail.src
+					}
+				}
+				if (thumbnailUrl) {
+					indicator.style.backgroundImage = 'url("' + thumbnailUrl + '")'
+				}
+			}
+			if (title) {
+				indicator.title = title;
+			}
+			return indicator;
+		},
 
-	    addIndicator: function (index) {
-	      if (this.indicatorContainer.length) {
-	        var indicator = this.createIndicator(this.list[index])
-	        indicator.setAttribute('data-index', index)
-	        this.indicatorContainer[0].appendChild(indicator)
-	        this.indicators.push(indicator)
-	      }
-	    },
+		addIndicator: function (index) {
+			if (this.indicatorContainer.length) {
+				var indicator = this.createIndicator(this.list[index])
+				indicator.setAttribute('data-index', index)
+				this.indicatorContainer[0].appendChild(indicator)
+				this.indicators.push(indicator)
+			}
+		},
 
-	    setActiveIndicator: function (index) {
-	      if (this.indicators) {
-	        if (this.activeIndicator) {
-	          this.activeIndicator.removeClass(this.options.activeIndicatorClass)
-	        }
-	        this.activeIndicator = $(this.indicators[index])
-	        this.activeIndicator.addClass(this.options.activeIndicatorClass)
-	      }
-	    },
+		setActiveIndicator: function (index) {
+			if (this.indicators) {
+				if (this.activeIndicator) {
+					this.activeIndicator.removeClass(this.options.activeIndicatorClass)
+				}
+				this.activeIndicator = $(this.indicators[index])
+				this.activeIndicator.addClass(this.options.activeIndicatorClass)
+			}
+		},
 
-	    initSlides: function (reload) {
-	      if (!reload) {
-	        this.indicatorContainer = this.container.find(
-	          this.options.indicatorContainer
-	        )
-	        if (this.indicatorContainer.length) {
-	          this.indicatorPrototype = document.createElement('li')
-	          this.indicators = this.indicatorContainer[0].children
-	        }
-	      }
-	      this.overrided(reload);
-	    },
+		initSlides: function (reload) {
+			if (!reload) {
+				this.indicatorContainer = this.container.find(
+					this.options.indicatorContainer
+				)
+				if (this.indicatorContainer.length) {
+					this.indicatorPrototype = document.createElement('li')
+					this.indicators = this.indicatorContainer[0].children
+				}
+			}
+			this.overrided(reload);
+		},
 
-	    addSlide: function (index) {
-	      this.overrided(index);
-	      this.addIndicator(index)
-	    },
+		addSlide: function (index) {
+			this.overrided(index);
+			this.addIndicator(index)
+		},
 
-	    resetSlides: function () {
-	    	this.overrided();
-	    	this.indicatorContainer.empty();
-	    	this.indicators = [];
-	    },
+		resetSlides: function () {
+			this.overrided();
+			this.indicatorContainer.empty();
+			this.indicators = [];
+		},
 
-	    handleClick: function (event) {
-	      var target = event.target || event.srcElement
-	      var parent = target.parentNode
-	      if (parent === this.indicatorContainer[0]) {
-	        // Click on indicator element
-	        this.preventDefault(event)
-	        this.slide(this.getNodeIndex(target))
-	      } else if (parent.parentNode === this.indicatorContainer[0]) {
-	        // Click on indicator child element
-	        this.preventDefault(event)
-	        this.slide(this.getNodeIndex(parent))
-	      } else {
-	        return this.overrided(event)
-	      }
-	    },
+		handleClick: function (event) {
+			var target = event.target || event.srcElement
+			var parent = target.parentNode
+			if (parent === this.indicatorContainer[0]) {
+				// Click on indicator element
+				this.preventDefault(event)
+				this.slide(this.getNodeIndex(target))
+			} else if (parent.parentNode === this.indicatorContainer[0]) {
+				// Click on indicator child element
+				this.preventDefault(event)
+				this.slide(this.getNodeIndex(parent))
+			} else {
+				return this.overrided(event)
+			}
+		},
 
-	    handleSlide: function (index) {
-	      this.overrided(index)
-	      this.setActiveIndicator(index)
-	    },
+		handleSlide: function (index) {
+			this.overrided(index)
+			this.setActiveIndicator(index)
+		},
 
-	    handleClose: function () {
-	      if (this.activeIndicator) {
-	        this.activeIndicator.removeClass(this.options.activeIndicatorClass)
-	      }
-	      this.overrided();
-	    }
+		handleClose: function () {
+			if (this.activeIndicator) {
+				this.activeIndicator.removeClass(this.options.activeIndicatorClass)
+			}
+			this.overrided();
+		}
 
 	});
 
-	Album.installPlugin("views",{
-		"name" :  "lightbox",
-		"ctor" :  LightBoxView,
-		"templates" : {
-			"default" : '<div class="slides"></div>' +
-			          '<h3 class="title"></h3>' +
-			          '<a class="prev">‹</a>' +
-			          '<a class="next">›</a>' +
-			          '<a class="close">×</a>' + 
-			          '<ol class="indicator"></ol>'
-
-		} 
+	Album.installPlugin("views", {
+		"name": "lightbox",
+		"ctor": LightBoxView,
+		"templates": {
+			"default": '<div class="slides"></div>' +
+				'<h3 class="title"></h3>' +
+				'<a class="prev">‹</a>' +
+				'<a class="next">›</a>' +
+				'<a class="close">×</a>' +
+				'<ol class="indicator"></ol>'
+		}
 	});
 
 	return LightBoxView;
@@ -2529,10 +2500,9 @@ define('skylark-ui-album/main',[
     "./plugins/views/SliderView",
     "./plugins/views/CarouselView",
     "./plugins/views/LightBoxView"
-], function(Album) {
+], function (Album) {
     return Album;
-})
-;
+});
 define('skylark-ui-album', ['skylark-ui-album/main'], function (main) { return main; });
 
 

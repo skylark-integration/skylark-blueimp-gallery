@@ -3,10 +3,8 @@
 define([
   "skylark-utils/langx",
   "skylark-utils/query"
-],function (langx,q) {
+], function (langx, q) {
   'use strict'
-
   q.extend = langx.mixin;
-
   return q;
 });
