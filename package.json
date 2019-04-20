@@ -24,12 +24,10 @@
   "author": "Hudaokeji Co.,Ltd",
   "license": "MIT",
   "bugs": "https://github.com/skylarkjs/skylark/issues",
-  "devDependencies": {
-    "skylark-langx": "https://github.com/skylarkjs/skylark-langx#master",
-    "skylark-utils": "https://github.com/skylarkutils/skylark-utils#master",
-    "skylark-utils-layout": "https://github.com/skylarkutils/skylark-utils-layout#master",
-    "skylark-jquery": "https://github.com/skylarkutils/skylark-jquery#master",
-    "skylark-utils-dom": "https://github.com/skylarkutils/skylark-utils-dom#master"
+  "dependencies": {
+    "skylark-langx": "https://github.com/skylarklangx/skylark-langx#master",
+    "skylark-utils-dom": "https://github.com/skylarkutils/skylark-utils-dom#master",
+    "skylark-ui-swt": "https://github.com/skylarkui/skylark-ui-swt#master"
   },
   "engines": {
     "node": ">=0.8.0"

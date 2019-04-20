@@ -2,9 +2,9 @@
 
 define([
   'skylark-langx/langx',
-  '../../helper',
+  'skylark-utils-dom/noder',
   '../../Album'
-], function (langx, $, Album) {
+], function (langx, ndoer, Album) {
   'use strict'
   var SliderView = Album.ViewBase.inherit({
     klassName: "SliderView",
@@ -253,7 +253,7 @@ define([
       this.overrided(album, options);
 
       this.list = this.album.items;
-      this.options.container = this.album.el;
+      this.options.container = this.album.elm();
       this.num = this.list.length;
 
       this.initStartIndex()
@@ -566,7 +566,7 @@ define([
       if (this.touchStart) {
         var target = event.target
         var related = event.relatedTarget
-        if (!related || (related !== target && !$.contains(target, related))) {
+        if (!related || (related !== target && !noder.contains(target, related))) {
           this.onmouseup(event)
         }
       }

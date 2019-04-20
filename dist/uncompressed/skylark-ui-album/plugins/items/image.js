@@ -1,7 +1,7 @@
 define([
 	"skylark-langx/langx",
-	"skylark-utils/noder",
-	"skylark-utils/query",
+	"skylark-utils-dom/noder",
+	"skylark-utils-dom/query",
 	'../../Album',
 ], function (langx, noder, $, Album) {
 	var ImageItemFactory = Album.ItemFactoryBase.inherit({

@@ -1,15 +1,17 @@
 define([
 	"skylark-langx/skylark",
 	"skylark-langx/langx",
-	"skylark-utils/noder",
-	"skylark-utils/widgets"
-], function (skylark, langx, noder, widgets) {
+	"skylark-utils-dom/noder",
+  	"skylark-ui-swt/Widget",
+], function (skylark, langx, noder, Widget) {
 	var registry = {
 		views: [],
 		items: []
 	};
-	var Album = widgets.Widget.inherit({
+	var Album = Widget.inherit({
 		klassName: "Album",
+	    pluginName : "lark.album",
+
 		options: {
 			// The list object property (or data attribute) with the object type:
 			typeProperty: 'type',
@@ -26,11 +28,12 @@ define([
 		/*
 		 * @param {Element} el The container element. 
 		 */
-		init: function (el, options) {
+		//init: function (el, options) {
+		_init : function() {
 			//this.overrided(el,options);	
-			this.$el = $(el);
+			this.$el = this._elm; // $(el);
 			this.el = this.$el[0];
-			this.options = langx.mixin({}, Album.prototype.options, options);
+			//this.options = langx.mixin({}, Album.prototype.options, options);
 			this._itemFactories = {
 
 			};

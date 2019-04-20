@@ -1,8 +1,8 @@
 define([
   "skylark-langx/langx",
-  "skylark-utils/noder",
-  "skylark-utils/eventer",
-  "skylark-utils/query",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/query",
   '../../Album',
 ], function (langx, noder, eventer, $, Album) {
 

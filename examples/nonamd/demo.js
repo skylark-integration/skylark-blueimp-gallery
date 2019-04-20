@@ -10,50 +10,46 @@
  */
 
 /* global blueimp, $ */
+var $ = skylarkjs.dom.query,
+    langx = skylarkjs.langx;
 
 $(function () {
   'use strict'
 
-  // Load demo images from flickr:
-  $.ajax({
-    url: 'https://api.flickr.com/services/rest/',
-//    url: './api.flickr.com.json',
-    data: {
-      format: 'json',
-      method: 'flickr.interestingness.getList',
-      api_key: '7617adae70159d09ba78cfec73c13be3' // jshint ignore:line
+  var carouselLinks = [
+    {
+     type: 'image',
+
+      href : "https://i.imgur.com/MUSw4Zu.jpg",
+      title : "1"
     },
-    dataType: 'jsonp',
-    jsonp: 'jsoncallback'
-  }).done(function (result) {
-    var carouselLinks = []
-    var linksContainer = $('#links')
-    var baseUrl
-    // Add the demo images as links with thumbnails to the page:
-    $.each(result.photos.photo, function (index, photo) {
-      baseUrl = 'https://farm' + photo.farm + '.static.flickr.com/' +
-      photo.server + '/' + photo.id + '_' + photo.secret
-      $('<a/>')
-        .append($('<img>').prop('src', baseUrl + '_s.jpg'))
-        .prop('href', baseUrl + '_b.jpg')
-        .prop('title', photo.title)
-        .attr('data-gallery', '')
-        .appendTo(linksContainer)
-      carouselLinks.push({
-        href: baseUrl + '_c.jpg',
-        title: photo.title
-      })
-    });
+    {
+     type: 'image',
+      href : 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/' +
+      'Big_Buck_Bunny_4K.webm/4000px--Big_Buck_Bunny_4K.webm.jpg',
+      title : "2"
+    },
+    {
+     type: 'image',
+      href : 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/' +
+        'Elephants_Dream_s1_proog.jpg/800px-Elephants_Dream_s1_proog.jpg',
+      title : "3"
+    },
+    {
+     type: 'image',
+      href : "https://secure-a.vimeocdn.com/ts/448/835/448835699_960.jpg",
+      title : "4"
+    }
+  ];
     // Initialize the Gallery as image carousel:
-    skylarkjs.ui.Album('#image-carousel', {
-      items: carouselLinks,
-      view : {
-        mode : "slider",
-        options : {
-          carousel: true
-        }
+  $('#image-carousel').plugin("lark.album",{
+    items: carouselLinks,
+    view : {
+      mode : "slider",
+      options : {
+        carousel: true
       }
-    })
+    }
   });
 
   // Initialize the Gallery as video carousel:
@@ -95,7 +91,7 @@ $(function () {
     }
   ];
 
-  skylarkjs.ui.Album('#video-carousel', {
+  $('#video-carousel').plugin("lark.album",{
     items: videos,
     view : {
       mode : "slider",
@@ -133,7 +129,7 @@ $(function () {
           container.trigger('closed').removeData('gallery')
         }
       };
-      var viewOptions = $.extend(
+      var viewOptions = langx.extend(
         // Retrieve custom options from data-attributes
         // on the Gallery widget:
         container.data(),

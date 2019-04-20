@@ -37,11 +37,16 @@
                 deps: deps.map(function(dep){
                   return absolute(dep,id);
                 }),
+                resolved: false,
                 exports: null
             };
             require(id);
         } else {
-            map[id] = factory;
+            map[id] = {
+                factory : null,
+                resolved : true,
+                exports : factory
+            };
         }
     };
     require = globals.require = function(id) {
@@ -49,14 +54,15 @@
             throw new Error('Module ' + id + ' has not been defined');
         }
         var module = map[id];
-        if (!module.exports) {
+        if (!module.resolved) {
             var args = [];
 
             module.deps.forEach(function(dep){
                 args.push(require(dep));
             })
 
-            module.exports = module.factory.apply(window, args);
+            module.exports = module.factory.apply(globals, args) || null;
+            module.resolved = true;
         }
         return module.exports;
     };
@@ -72,7 +78,7 @@
     var skylarkjs = require("skylark-langx/skylark");
 
     if (isCmd) {
-      exports = skylarkjs;
+      module.exports = skylarkjs;
     } else {
       globals.skylarkjs  = skylarkjs;
     }
@@ -83,15 +89,17 @@
 define('skylark-ui-album/Album',[
 	"skylark-langx/skylark",
 	"skylark-langx/langx",
-	"skylark-utils/noder",
-	"skylark-utils/widgets"
-], function (skylark, langx, noder, widgets) {
+	"skylark-utils-dom/noder",
+  	"skylark-ui-swt/Widget",
+], function (skylark, langx, noder, Widget) {
 	var registry = {
 		views: [],
 		items: []
 	};
-	var Album = widgets.Widget.inherit({
+	var Album = Widget.inherit({
 		klassName: "Album",
+	    pluginName : "lark.album",
+
 		options: {
 			// The list object property (or data attribute) with the object type:
 			typeProperty: 'type',
@@ -108,11 +116,12 @@ define('skylark-ui-album/Album',[
 		/*
 		 * @param {Element} el The container element. 
 		 */
-		init: function (el, options) {
+		//init: function (el, options) {
+		_init : function() {
 			//this.overrided(el,options);	
-			this.$el = $(el);
+			this.$el = this._elm; // $(el);
 			this.el = this.$el[0];
-			this.options = langx.mixin({}, Album.prototype.options, options);
+			//this.options = langx.mixin({}, Album.prototype.options, options);
 			this._itemFactories = {
 
 			};
@@ -366,8 +375,8 @@ define('skylark-ui-album/Album',[
 /* global define, window, document */
 
 define('skylark-ui-album/helper',[
-  "skylark-utils/langx",
-  "skylark-utils/query"
+  "skylark-utils-dom/langx",
+  "skylark-utils-dom/query"
 ], function (langx, q) {
   'use strict'
   q.extend = langx.mixin;
@@ -375,8 +384,8 @@ define('skylark-ui-album/helper',[
 });
 define('skylark-ui-album/plugins/items/image',[
 	"skylark-langx/langx",
-	"skylark-utils/noder",
-	"skylark-utils/query",
+	"skylark-utils-dom/noder",
+	"skylark-utils-dom/query",
 	'../../Album',
 ], function (langx, noder, $, Album) {
 	var ImageItemFactory = Album.ItemFactoryBase.inherit({
@@ -465,9 +474,9 @@ define('skylark-ui-album/plugins/items/image',[
 });
 define('skylark-ui-album/plugins/items/video',[
   "skylark-langx/langx",
-  "skylark-utils/noder",
-  "skylark-utils/eventer",
-  "skylark-utils/query",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/query",
   '../../Album',
 ], function (langx, noder, eventer, $, Album) {
 
@@ -635,8 +644,8 @@ define('skylark-ui-album/plugins/items/video',[
 });
 define('skylark-ui-album/plugins/items/vimeo',[
   "skylark-langx/langx",
-  "skylark-utils/noder",
-  "skylark-utils/query",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/query",
   '../../Album',
   './video'
 ], function (langx, noder, $, Album, video) {
@@ -842,8 +851,8 @@ define('skylark-ui-album/plugins/items/vimeo',[
 });
 define('skylark-ui-album/plugins/items/youtube',[
   "skylark-langx/langx",
-  "skylark-utils/noder",
-  "skylark-utils/query",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/query",
   '../../Album',
   './video'
 ], function (langx, noder, $, Album, video) {
@@ -1057,9 +1066,9 @@ define('skylark-ui-album/plugins/items/youtube',[
 
 define('skylark-ui-album/plugins/views/SliderView',[
   'skylark-langx/langx',
-  '../../helper',
+  'skylark-utils-dom/noder',
   '../../Album'
-], function (langx, $, Album) {
+], function (langx, ndoer, Album) {
   'use strict'
   var SliderView = Album.ViewBase.inherit({
     klassName: "SliderView",
@@ -1308,7 +1317,7 @@ define('skylark-ui-album/plugins/views/SliderView',[
       this.overrided(album, options);
 
       this.list = this.album.items;
-      this.options.container = this.album.el;
+      this.options.container = this.album.elm();
       this.num = this.list.length;
 
       this.initStartIndex()
@@ -1621,7 +1630,7 @@ define('skylark-ui-album/plugins/views/SliderView',[
       if (this.touchStart) {
         var target = event.target
         var related = event.relatedTarget
-        if (!related || (related !== target && !$.contains(target, related))) {
+        if (!related || (related !== target && !noder.contains(target, related))) {
           this.onmouseup(event)
         }
       }
@@ -2507,3 +2516,4 @@ define('skylark-ui-album', ['skylark-ui-album/main'], function (main) { return m
 
 
 },this);
+//# sourceMappingURL=sourcemaps/skylark-ui-album.js.map
