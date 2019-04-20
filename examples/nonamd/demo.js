@@ -42,7 +42,7 @@ $(function () {
     }
   ];
     // Initialize the Gallery as image carousel:
-  $('#image-carousel').plugin("lark.album",{
+  $('#image-carousel').plugin("blueimp.gallery",{
     items: carouselLinks,
     view : {
       mode : "slider",
@@ -91,7 +91,7 @@ $(function () {
     }
   ];
 
-  $('#video-carousel').plugin("lark.album",{
+  $('#video-carousel').plugin("blueimp.gallery",{
     items: videos,
     view : {
       mode : "slider",
@@ -147,7 +147,7 @@ $(function () {
       if (viewOptions.filter) {
         links = links.filter(viewOptions.filter);
       }
-      return new skylarkjs.ui.Album(container[0],{
+      return new skylarkjs.itg.blueimp.Gallery(container[0],{
         items : links, 
         view : {
           mode : "lightbox",

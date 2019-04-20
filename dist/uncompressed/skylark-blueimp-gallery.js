@@ -1,6 +1,1072 @@
+/**
+ * skylark-blueimp-gallery - The skylark album widgets.
+ * @author Hudaokeji Co.,Ltd
+ * @version v0.9.0
+ * @link www.skylarkjs.org
+ * @license MIT
+ */
+(function(factory,globals) {
+  var define = globals.define,
+      require = globals.require,
+      isAmd = (typeof define === 'function' && define.amd),
+      isCmd = (!isAmd && typeof exports !== 'undefined');
+
+  if (!isAmd && !define) {
+    var map = {};
+    function absolute(relative, base) {
+        if (relative[0]!==".") {
+          return relative;
+        }
+        var stack = base.split("/"),
+            parts = relative.split("/");
+        stack.pop(); 
+        for (var i=0; i<parts.length; i++) {
+            if (parts[i] == ".")
+                continue;
+            if (parts[i] == "..")
+                stack.pop();
+            else
+                stack.push(parts[i]);
+        }
+        return stack.join("/");
+    }
+    define = globals.define = function(id, deps, factory) {
+        if (typeof factory == 'function') {
+            map[id] = {
+                factory: factory,
+                deps: deps.map(function(dep){
+                  return absolute(dep,id);
+                }),
+                resolved: false,
+                exports: null
+            };
+            require(id);
+        } else {
+            map[id] = {
+                factory : null,
+                resolved : true,
+                exports : factory
+            };
+        }
+    };
+    require = globals.require = function(id) {
+        if (!map.hasOwnProperty(id)) {
+            throw new Error('Module ' + id + ' has not been defined');
+        }
+        var module = map[id];
+        if (!module.resolved) {
+            var args = [];
+
+            module.deps.forEach(function(dep){
+                args.push(require(dep));
+            })
+
+            module.exports = module.factory.apply(globals, args) || null;
+            module.resolved = true;
+        }
+        return module.exports;
+    };
+  }
+  
+  if (!define) {
+     throw new Error("The module utility (ex: requirejs or skylark-utils) is not loaded!");
+  }
+
+  factory(define,require);
+
+  if (!isAmd) {
+    var skylarkjs = require("skylark-langx/skylark");
+
+    if (isCmd) {
+      module.exports = skylarkjs;
+    } else {
+      globals.skylarkjs  = skylarkjs;
+    }
+  }
+
+})(function(define,require) {
+
+define('skylark-blueimp-gallery/Gallery',[
+	"skylark-langx/skylark",
+	"skylark-langx/langx",
+	"skylark-utils-dom/noder",
+  	"skylark-ui-swt/Widget",
+], function (skylark, langx, noder, Widget) {
+	var registry = {
+		views: [],
+		items: []
+	};
+	var Gallery = Widget.inherit({
+		klassName: "Gallery",
+	    pluginName : "blueimp.gallery",
+
+		options: {
+			// The list object property (or data attribute) with the object type:
+			typeProperty: 'type',
+			// The list object property (or data attribute) with the object title:
+			titleProperty: 'title',
+			// The list object property (or data attribute) with the object alt text:
+			altTextProperty: 'alt',
+			// The list object property (or data attribute) with the object URL:
+			urlProperty: 'href',
+			// The list object property (or data attribute) with the object srcset URL(s):
+			srcsetProperty: 'urlset',
+		},
+		
+		/*
+		 * @param {Element} el The container element. 
+		 */
+		//init: function (el, options) {
+		_init : function() {
+			//this.overrided(el,options);	
+			this.$el = this._elm; // $(el);
+			this.el = this.$el[0];
+			//this.options = langx.mixin({}, Gallery.prototype.options, options);
+			this._itemFactories = {
+
+			};
+			this.items = this.options.items;
+			this.setViewMode(this.options.view.mode, this.options.view.options);
+		},
+
+		setViewMode: function (mode, options) {
+			this.viewMode = mode;
+			for (var i = 0; i < registry.views.length; i++) {
+				if (registry.views[i].name === mode) {
+					this.view = new registry.views[i].ctor(this, options);
+					break;
+				}
+			}
+		},
+
+		getItemUrl: function (item) {
+			return Gallery.getItemProperty(item, this.options.urlProperty);
+		},
+
+		getItemTitle: function (item) {
+			return Gallery.getItemProperty(item, this.options.titleProperty);
+		},
+
+		addItems: function (items) {
+			var i
+			if (!items.concat) {
+				// Make a real array out of the items to add:
+				items = Array.prototype.slice.call(items);
+			}
+			if (!this.items.concat) {
+				// Make a real array out of the Gallery items:
+				this.items = Array.prototype.slice.call(this.items);
+			}
+			this.items = this.items.concat(items);
+			this.num = this.items.length;
+			this.trigger("itemsChanged");
+		},
+
+		renderItem: function (item, callback) {
+			var type = item && Gallery.getItemProperty(item, this.options.typeProperty);
+
+			if (type) {
+				type = type.split('/')[0];
+			}
+
+			if (!type) {
+				//throw new Error("no type ");
+				type = "image";
+			}
+
+			var factory = this._itemFactories[type];
+
+			if (!factory) {
+				for (var i = 0; i < registry.items.length; i++) {
+					if (registry.items[i].mimeType === type) {
+						factory = this._itemFactories[type] = new registry.items[i].ctor(this);
+						break;
+					}
+				}
+			}
+
+			if (!factory) {
+				throw new Error("invalid type:" + type);
+			}
+
+			var element = factory.render(item, callback);
+			var srcset = Gallery.getItemProperty(item, this.options.srcsetProperty)
+			if (srcset) {
+				element.setAttribute('srcset', srcset)
+			}
+			return element;
+		},
+
+		/*
+		 * Check whether a item is runnable.
+		 * @param {Object} item The item object
+		 * @return {Boolean}
+		 */
+		isRunnable: function (item) {
+
+		},
+
+		playItem: function (item) {
+
+		}
+
+	});
+
+	langx.mixin(Gallery, {
+		getNestedProperty: function (obj, property) {
+			property.replace(
+				// Matches native JavaScript notation in a String,
+				// e.g. '["doubleQuoteProp"].dotProp[2]'
+				// eslint-disable-next-line no-useless-escape
+				/\[(?:'([^']+)'|"([^"]+)"|(\d+))\]|(?:(?:^|\.)([^\.\[]+))/g,
+				function (str, singleQuoteProp, doubleQuoteProp, arrayIndex, dotProp) {
+					var prop =
+						dotProp ||
+						singleQuoteProp ||
+						doubleQuoteProp ||
+						(arrayIndex && parseInt(arrayIndex, 10))
+					if (str && obj) {
+						obj = obj[prop]
+					}
+				}
+			)
+			return obj
+		},
+
+		getDataProperty: function (obj, property) {
+			var key
+			var prop
+			if (obj.dataset) {
+				key = property.replace(/-([a-z])/g, function (_, b) {
+					return b.toUpperCase()
+				})
+				prop = obj.dataset[key]
+			} else if (obj.getAttribute) {
+				prop = obj.getAttribute(
+					'data-' + property.replace(/([A-Z])/g, '-$1').toLowerCase()
+				)
+			}
+			if (typeof prop === 'string') {
+				// eslint-disable-next-line no-useless-escape
+				if (
+					/^(true|false|null|-?\d+(\.\d+)?|\{[\s\S]*\}|\[[\s\S]*\])$/.test(prop)
+				) {
+					try {
+						return $.parseJSON(prop)
+					} catch (ignore) {}
+				}
+				return prop
+			}
+		},
+
+		getItemProperty: function (obj, property) {
+			var prop = this.getDataProperty(obj, property)
+			if (prop === undefined) {
+				prop = obj[property]
+			}
+			if (prop === undefined) {
+				prop = this.getNestedProperty(obj, property)
+			}
+			return prop
+		}
+
+	});
+
+	var ViewBase = Gallery.ViewBase = langx.Evented.inherit({
+		klassName: "ViewBase",
+
+		options: {
+			// The class to add when the gallery controls are visible:
+			controlsClass: 'skylark-blueimp-gallery-controls',
+			// Defines if the gallery should open in fullscreen mode:
+			fullScreen: false
+
+		},
+
+		init: function (gallery, options) {
+			var that = this,
+				hasControls;
+			this.gallery = gallery;
+			this.initOptions(options);
+			if (this.options.fullScreen) {
+				noder.fullScreen(this.container[0]);
+			}
+			this.gallery.on("item.running", function (e) {
+				if (that.container.hasClass(that.options.controlsClass)) {
+					hasControls = true
+					that.container.removeClass(that.options.controlsClass);
+				} else {
+					hasControls = false
+				}
+			});
+
+			this.gallery.on("item.running", function (e) {
+				if (hasControls) {
+					that.container.addClass(that.options.controlsClass);
+				}
+			});
+		},
+
+		initOptions: function (options) {
+			// Create a copy of the prototype options:
+			this.options = langx.mixin({}, ViewBase.prototype.options, options);
+		},
+
+		close: function () {
+			if (noder.fullScreen() === this.container[0]) {
+				noder.fullScreen(false);
+			}
+		}
+	});
+
+	var ItemFactoryBase = Gallery.ItemFactoryBase = langx.Evented.inherit({
+		klassName: "ItemFactoryBase",
+
+		options: {
+			// The list object property (or data attribute) with the object type:
+			typeProperty: 'type',
+			// The list object property (or data attribute) with the object title:
+			titleProperty: 'title',
+			// The list object property (or data attribute) with the object alt text:
+			altTextProperty: 'alt',
+			// The list object property (or data attribute) with the object URL:
+			urlProperty: 'href',
+			// The list object property (or data attribute) with the object srcset URL(s):
+			srcsetProperty: 'urlset',
+		},
+
+		init: function (gallery, options) {
+			this.gallery = gallery;
+			this.initOptions(options);
+		},
+
+		initOptions: function (options) {
+			// Create a copy of the prototype options:
+			this.options = langx.mixin({}, ItemFactoryBase.prototype.options, options);
+		},
+
+		setTimeout: function (func, args, wait) {
+			var that = this
+			return (
+				func &&
+				window.setTimeout(function () {
+					func.apply(that, args || [])
+				}, wait || 0)
+			)
+		},
+
+		getNestedProperty: Gallery.getNestedProperty,
+
+		getDataProperty: Gallery.getDataProperty,
+
+		getItemProperty: Gallery.getItemProperty
+	});
+
+	Gallery.installPlugin = function (pointer, setting) {
+		var plugins = registry[pointer];
+		if (!plugins) {
+			throw new Error("Invalid paramerter!");
+		}
+		plugins.push(setting);
+	};
+
+	skylark.itg = skylark.itg || {};
+	skylark.itg.blueimp = skylark.itg.blueimp || {};
+	return skylark.itg.blueimp.Gallery = Gallery;
+});
+/* global define, window, document */
+
+define('skylark-blueimp-gallery/helper',[
+  "skylark-utils-dom/langx",
+  "skylark-utils-dom/query"
+], function (langx, q) {
+  'use strict'
+  q.extend = langx.mixin;
+  return q;
+});
+define('skylark-blueimp-gallery/plugins/items/image',[
+	"skylark-langx/langx",
+	"skylark-utils-dom/noder",
+	"skylark-utils-dom/query",
+	'../../Gallery',
+], function (langx, noder, $, Gallery) {
+	var ImageItemFactory = Gallery.ItemFactoryBase.inherit({
+		klassName: "ImageItemFactory",
+		options: {
+			// Defines if images should be stretched to fill the available space,
+			// while maintaining their aspect ratio (will only be enabled for browsers
+			// supporting background-size="contain", which excludes IE < 9).
+			// Set to "cover", to make images cover all available space (requires
+			// support for background-size="cover", which excludes IE < 9):
+			stretchImages: false
+		},
+
+		initOptions: function (options) {
+			this.overrided();
+			this.options = langx.mixin(this.options, ImageItemFactory.prototype.options, options);
+		},
+
+		render: function (obj, callback) {
+			var that = this,
+				img = noder.createElement("img"),
+				gallery = this.gallery,
+				url = obj,
+				backgroundSize = this.options.stretchImages,
+				called,
+				element,
+				title,
+				altText;
+
+			function callbackWrapper(event) {
+				if (!called) {
+					event = {
+						type: event.type,
+						target: element
+					}
+
+					called = true
+					$(img).off('load error', callbackWrapper)
+					if (backgroundSize) {
+						if (event.type === 'load') {
+							element.style.background = 'url("' + url + '") center no-repeat'
+							element.style.backgroundSize = backgroundSize
+						}
+					}
+					callback(event)
+				}
+			}
+			if (typeof url !== 'string') {
+				url = this.getItemProperty(obj, this.options.urlProperty);
+				title = this.getItemProperty(obj, this.options.titleProperty);
+				altText =
+					this.getItemProperty(obj, this.options.altTextProperty) || title;
+			}
+			if (backgroundSize === true) {
+				backgroundSize = 'contain';
+			}
+			if (backgroundSize) {
+				element = noder.createElement("div");
+			} else {
+				element = img;
+				img.draggable = false;
+			}
+			if (title) {
+				element.title = title;
+			}
+			if (altText) {
+				element.alt = altText;
+			}
+			$(img).on('load error', callbackWrapper);
+			img.src = url
+			return element;
+		}
+
+	});
+
+	var pluginInfo = {
+		name: "image",
+		mimeType: "image",
+		ctor: ImageItemFactory
+	};
+
+	Gallery.installPlugin("items", pluginInfo);
+
+	return pluginInfo;
+
+});
+define('skylark-blueimp-gallery/plugins/items/video',[
+  "skylark-langx/langx",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/query",
+  '../../Gallery',
+], function (langx, noder, eventer, $, Gallery) {
+
+  'use strict'
+
+  var VideoItemFactory = Gallery.ItemFactoryBase.inherit({
+    klassName: "VideoItemFactory",
+
+    options: {
+      // The class for video content elements:
+      videoContentClass: 'video-content',
+      // The class for video when it is loading:
+      videoLoadingClass: 'video-loading',
+      // The class for video when it is playing:
+      videoPlayingClass: 'video-playing',
+      // The list object property (or data attribute) for the video poster URL:
+      videoPosterProperty: 'poster',
+      // The list object property (or data attribute) for the video sources array:
+      videoSourcesProperty: 'sources'
+    },
+
+    initOptions: function (options) {
+      this.overrided();
+      this.options = langx.mixin(this.options, VideoItemFactory.prototype.options, options);
+    },
+
+    handleSlide: function (index) {
+      handleSlide.call(this, index)
+      if (this.playingVideo) {
+        this.playingVideo.pause()
+      }
+    },
+
+    render: function (obj, callback, videoInterface) {
+      var that = this
+      var options = this.options
+      var videoContainerNode = noder.createElement("div")
+      var videoContainer = $(videoContainerNode)
+      var errorArgs = [{
+        type: 'error',
+        target: videoContainerNode
+      }]
+      var video = videoInterface || document.createElement('video')
+      var url = this.getItemProperty(obj, options.urlProperty)
+      var type = this.getItemProperty(obj, options.typeProperty)
+      var title = this.getItemProperty(obj, options.titleProperty)
+      var altText =
+        this.getItemProperty(obj, this.options.altTextProperty) || title
+      var posterUrl = this.getItemProperty(obj, options.videoPosterProperty)
+      var posterImage
+      var sources = this.getItemProperty(obj, options.videoSourcesProperty)
+      var source
+      var playMediaControl
+      var isLoading
+      var hasControls
+      videoContainer.addClass(options.videoContentClass)
+      if (title) {
+        videoContainerNode.title = title
+      }
+      if (video.canPlayType) {
+        if (url && type && video.canPlayType(type)) {
+          video.src = url
+        } else if (sources) {
+          while (sources.length) {
+            source = sources.shift()
+            url = this.getItemProperty(source, options.urlProperty)
+            type = this.getItemProperty(source, options.typeProperty)
+            if (url && type && video.canPlayType(type)) {
+              video.src = url
+              break
+            }
+          }
+        }
+      }
+      if (posterUrl) {
+        video.poster = posterUrl
+        posterImage = noder.createElement("img")
+        $(posterImage).addClass(options.toggleClass)
+        posterImage.src = posterUrl
+        posterImage.draggable = false
+        posterImage.alt = altText
+        videoContainerNode.appendChild(posterImage)
+      }
+      playMediaControl = document.createElement('a')
+      playMediaControl.setAttribute('target', '_blank')
+      if (!videoInterface) {
+        playMediaControl.setAttribute('download', title)
+      }
+      playMediaControl.href = url
+      if (video.src) {
+        video.controls = true;
+        (videoInterface || $(video))
+        .on('error', function () {
+            that.setTimeout(callback, errorArgs)
+          })
+          .on('pause', function () {
+            if (video.seeking) return
+            isLoading = false
+            videoContainer
+              .removeClass(that.options.videoLoadingClass)
+              .removeClass(that.options.videoPlayingClass)
+            that.gallery.trigger("item.pause", {
+              item: that
+            });
+            delete that.playingVideo
+            if (that.interval) {
+              that.play()
+            }
+          })
+          .on('playing', function () {
+            isLoading = false
+            videoContainer
+              .removeClass(that.options.videoLoadingClass)
+              .addClass(that.options.videoPlayingClass);
+
+            that.gallery.trigger("item.running", {
+              item: that
+            });
+          })
+          .on('play', function () {
+            window.clearTimeout(that.timeout)
+            isLoading = true
+            videoContainer.addClass(that.options.videoLoadingClass)
+            that.playingVideo = video
+
+            that.gallery.trigger("item.run", {
+              item: that
+            });
+          })
+        $(playMediaControl).on('click', function (event) {
+          eventer.stop(event)
+          if (isLoading) {
+            video.pause()
+          } else {
+            video.play()
+          }
+        })
+        videoContainerNode.appendChild(
+          (videoInterface && videoInterface.element) || video
+        )
+      }
+      videoContainerNode.appendChild(playMediaControl)
+      this.setTimeout(callback, [{
+        type: 'load',
+        target: videoContainerNode
+      }])
+      return videoContainerNode
+
+    }
+
+
+  });
+
+
+  var pluginInfo = {
+    name: "video",
+    mimeType: "video",
+    ctor: VideoItemFactory
+  };
+
+  Gallery.installPlugin("items", pluginInfo);
+
+  return pluginInfo;
+
+});
+define('skylark-blueimp-gallery/plugins/items/vimeo',[
+  "skylark-langx/langx",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/query",
+  '../../Gallery',
+  './video'
+], function (langx, noder, $, Gallery, video) {
+  'use strict'
+
+  var VimeoPlayer = langx.Evented.inherit({
+    klassName: "VimeoPlayer",
+
+    init: function (url, videoId, playerId, clickToPlay) {
+      this.url = url
+      this.videoId = videoId
+      this.playerId = playerId
+      this.clickToPlay = clickToPlay
+      this.element = document.createElement('div')
+      this.listeners = {}
+    },
+
+    canPlayType: function () {
+      return true
+    },
+
+    on: function (type, func) {
+      this.listeners[type] = func
+      return this
+    },
+
+    loadAPI: function () {
+      var that = this
+      var apiUrl = '//f.vimeocdn.com/js/froogaloop2.min.js'
+      var scriptTags = document.getElementsByTagName('script')
+      var i = scriptTags.length
+      var scriptTag
+      var called
+
+      function callback() {
+        if (!called && that.playOnReady) {
+          that.play()
+        }
+        called = true
+      }
+      while (i) {
+        i -= 1
+        if (scriptTags[i].src === apiUrl) {
+          scriptTag = scriptTags[i]
+          break
+        }
+      }
+      if (!scriptTag) {
+        scriptTag = document.createElement('script')
+        scriptTag.src = apiUrl
+      }
+      $(scriptTag).on('load', callback)
+      scriptTags[0].parentNode.insertBefore(scriptTag, scriptTags[0])
+      // Fix for cached scripts on IE 8:
+      if (/loaded|complete/.test(scriptTag.readyState)) {
+        callback()
+      }
+    },
+
+    onReady: function () {
+      var that = this
+      this.ready = true
+      this.player.addEvent('play', function () {
+        that.hasPlayed = true
+        that.onPlaying()
+      })
+      this.player.addEvent('pause', function () {
+        that.onPause()
+      })
+      this.player.addEvent('finish', function () {
+        that.onPause()
+      })
+      if (this.playOnReady) {
+        this.play()
+      }
+    },
+
+    onPlaying: function () {
+      if (this.playStatus < 2) {
+        this.listeners.playing()
+        this.playStatus = 2
+      }
+    },
+
+    onPause: function () {
+      this.listeners.pause()
+      delete this.playStatus
+    },
+
+    insertIframe: function () {
+      var iframe = document.createElement('iframe')
+      iframe.src = this.url
+        .replace('VIDEO_ID', this.videoId)
+        .replace('PLAYER_ID', this.playerId)
+      iframe.id = this.playerId
+      this.element.parentNode.replaceChild(iframe, this.element)
+      this.element = iframe
+    },
+
+    play: function () {
+      var that = this
+      if (!this.playStatus) {
+        this.listeners.play()
+        this.playStatus = 1
+      }
+      if (this.ready) {
+        if (
+          !this.hasPlayed &&
+          (this.clickToPlay ||
+            (window.navigator &&
+              /iP(hone|od|ad)/.test(window.navigator.platform)))
+        ) {
+          // Manually trigger the playing callback if clickToPlay
+          // is enabled and to workaround a limitation in iOS,
+          // which requires synchronous user interaction to start
+          // the video playback:
+          this.onPlaying()
+        } else {
+          this.player.api('play')
+        }
+      } else {
+        this.playOnReady = true
+        if (!window.$f) {
+          this.loadAPI()
+        } else if (!this.player) {
+          this.insertIframe()
+          this.player = $f(this.element)
+          this.player.addEvent('ready', function () {
+            that.onReady()
+          })
+        }
+      }
+    },
+
+    pause: function () {
+      if (this.ready) {
+        this.player.api('pause');
+      } else if (this.playStatus) {
+        delete this.playOnReady;
+        this.listeners.pause()
+        delete this.playStatus;
+      }
+    }
+  });
+
+
+  var counter = 0;
+
+  var VimeoItemFactory = video.ctor.inherit({
+    klassName: "VimeoItemFactory",
+
+    VimeoPlayer: VimeoPlayer,
+
+    options: {
+      // The list object property (or data attribute) with the Vimeo video id:
+      vimeoVideoIdProperty: 'vimeo',
+      // The URL for the Vimeo video player, can be extended with custom parameters:
+      // https://developer.vimeo.com/player/embedding
+      vimeoPlayerUrl: '//player.vimeo.com/video/VIDEO_ID?api=1&player_id=PLAYER_ID',
+      // The prefix for the Vimeo video player ID:
+      vimeoPlayerIdPrefix: 'vimeo-player-',
+      // Require a click on the native Vimeo player for the initial playback:
+      vimeoClickToPlay: true
+    },
+
+    initOptions: function (options) {
+      this.overrided();
+      this.options = langx.mixin(this.options, VimeoItemFactory.prototype.options, options);
+    },
+
+    render: function (obj, callback) {
+      var options = this.options
+      var videoId = this.getItemProperty(obj, options.vimeoVideoIdProperty)
+      if (videoId) {
+        if (this.getItemProperty(obj, options.urlProperty) === undefined) {
+          obj[options.urlProperty] = '//vimeo.com/' + videoId
+        }
+        counter += 1;
+        return this.overrided(
+          obj,
+          callback,
+          new VimeoPlayer(
+            options.vimeoPlayerUrl,
+            videoId,
+            options.vimeoPlayerIdPrefix + counter,
+            options.vimeoClickToPlay
+          )
+        )
+      }
+    }
+  });
+
+  var pluginInfo = {
+    name: "vimeo",
+    mimeType: "vimeo",
+    ctor: VimeoItemFactory
+  };
+
+  Gallery.installPlugin("items", pluginInfo);
+
+  return pluginInfo;
+
+});
+define('skylark-blueimp-gallery/plugins/items/youtube',[
+  "skylark-langx/langx",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/query",
+  '../../Gallery',
+  './video'
+], function (langx, noder, $, Gallery, video) {
+  'use strict'
+
+  var YouTubePlayer = langx.Evented.inherit({
+    klassName: "YouTubePlayer",
+
+    init: function (videoId, playerVars, clickToPlay) {
+      this.videoId = videoId;
+      this.playerVars = playerVars;
+      this.clickToPlay = clickToPlay;
+      this.element = document.createElement('div');
+    },
+
+    canPlayType: function () {
+      return true;
+    },
+
+    loadAPI: function () {
+      var that = this,
+        onYouTubeIframeAPIReady = window.onYouTubeIframeAPIReady,
+        apiUrl = 'https://www.youtube.com/iframe_api',
+        scriptTags = document.getElementsByTagName('script'),
+        i = scriptTags.length,
+        scriptTag;
+
+      window.onYouTubeIframeAPIReady = function () {
+        if (onYouTubeIframeAPIReady) {
+          onYouTubeIframeAPIReady.apply(this);
+        }
+        if (that.playOnReady) {
+          that.play();
+        }
+      }
+      while (i) {
+        i -= 1
+        if (scriptTags[i].src === apiUrl) {
+          return
+        }
+      }
+      scriptTag = document.createElement('script')
+      scriptTag.src = apiUrl
+      scriptTags[0].parentNode.insertBefore(scriptTag, scriptTags[0])
+    },
+
+    onReady: function () {
+      this.ready = true;
+      if (this.playOnReady) {
+        this.play()
+      }
+    },
+
+    onPlaying: function () {
+      if (this.playStatus < 2) {
+        this.listeners.playing();
+        this.playStatus = 2;
+      }
+    },
+
+    onPause: function () {
+      Gallery.prototype.setTimeout.call(this, this.checkSeek, null, 2000)
+    },
+
+    checkSeek: function () {
+      if (
+        this.stateChange === YT.PlayerState.PAUSED ||
+        this.stateChange === YT.PlayerState.ENDED
+      ) {
+        // check if current state change is actually paused
+        this.listeners.pause()
+        delete this.playStatus
+      }
+    },
+
+    onStateChange: function (event) {
+      switch (event.data) {
+        case YT.PlayerState.PLAYING:
+          this.hasPlayed = true
+          this.onPlaying()
+          break
+        case YT.PlayerState.PAUSED:
+        case YT.PlayerState.ENDED:
+          this.onPause()
+          break
+      }
+      // Save most recent state change to this.stateChange
+      this.stateChange = event.data
+    },
+
+    onError: function (event) {
+      this.trigger("error", event);
+    },
+
+    play: function () {
+      var that = this
+      if (!this.playStatus) {
+        this.listeners.play();
+        this.playStatus = 1;
+      }
+      if (this.ready) {
+        if (
+          !this.hasPlayed &&
+          (this.clickToPlay ||
+            (window.navigator &&
+              /iP(hone|od|ad)/.test(window.navigator.platform)))
+        ) {
+          // Manually trigger the playing callback if clickToPlay
+          // is enabled and to workaround a limitation in iOS,
+          // which requires synchronous user interaction to start
+          // the video playback:
+          this.onPlaying();
+        } else {
+          this.player.playVideo();
+        }
+      } else {
+        this.playOnReady = true;
+        if (!(window.YT && YT.Player)) {
+          this.loadAPI();
+        } else if (!this.player) {
+          this.player = new YT.Player(this.element, {
+            videoId: this.videoId,
+            playerVars: this.playerVars,
+            events: {
+              onReady: function () {
+                that.onReady()
+              },
+              onStateChange: function (event) {
+                that.onStateChange(event)
+              },
+              onError: function (event) {
+                that.onError(event)
+              }
+            }
+          })
+        }
+      }
+    },
+
+    pause: function () {
+      if (this.ready) {
+        this.player.pauseVideo()
+      } else if (this.playStatus) {
+        delete this.playOnReady
+        this.listeners.pause()
+        delete this.playStatus
+      }
+    }
+  });
+
+
+  var YouTubeItemFactory = video.ctor.inherit({
+    klassName: "YouTubeItemFactory",
+
+    YouTubePlayer: YouTubePlayer,
+
+    options: {
+      // The list object property (or data attribute) with the YouTube video id:
+      youTubeVideoIdProperty: 'youtube',
+      // Optional object with parameters passed to the YouTube video player:
+      // https://developers.google.com/youtube/player_parameters
+      youTubePlayerVars: {
+        wmode: 'transparent'
+      },
+      // Require a click on the native YouTube player for the initial playback:
+      youTubeClickToPlay: true
+    },
+
+    initOptions: function (options) {
+      this.overrided();
+      this.options = langx.mixin(this.options, YouTubeItemFactory.prototype.options, options);
+    },
+
+    render: function (obj, callback) {
+      var options = this.options
+      var videoId = this.getItemProperty(obj, options.youTubeVideoIdProperty)
+      if (videoId) {
+        if (this.getItemProperty(obj, options.urlProperty) === undefined) {
+          obj[options.urlProperty] = '//www.youtube.com/watch?v=' + videoId
+        }
+        if (
+          this.getItemProperty(obj, options.videoPosterProperty) === undefined
+        ) {
+          obj[options.videoPosterProperty] =
+            '//img.youtube.com/vi/' + videoId + '/maxresdefault.jpg'
+        }
+        return this.overrided(
+          obj,
+          callback,
+          new YouTubePlayer(
+            videoId,
+            options.youTubePlayerVars,
+            options.youTubeClickToPlay
+          )
+        )
+      }
+    }
+  });
+
+  var pluginInfo = {
+    name: "youtube",
+    mimeType: "youtube",
+    ctor: YouTubeItemFactory
+  };
+
+  Gallery.installPlugin("items", pluginInfo);
+
+  return pluginInfo;
+});
 /* global define, window, document, DocumentTouch */
 
-define([
+define('skylark-blueimp-gallery/plugins/views/SliderView',[
   'skylark-langx/langx',
   'skylark-utils-dom/noder',
   '../../Gallery'
@@ -1245,3 +2311,211 @@ define([
 
   return Gallery.SliderView = SliderView;
 });
+define('skylark-blueimp-gallery/plugins/views/CarouselView',[
+	'../../Gallery',
+	'./SliderView'
+], function (Gallery, SliderView) {
+
+	var CarouselView = SliderView.inherit({
+		klassName: "CarouselView",
+
+		options: {
+			hidePageScrollbars: false,
+			toggleControlsOnReturn: false,
+			toggleSlideshowOnSpace: false,
+			enableKeyboardNavigation: false,
+			closeOnEscape: false,
+			closeOnSlideClick: false,
+			closeOnSwipeUpOrDown: false,
+			disableScroll: false,
+			startSlideshow: true
+		},
+
+		initOptions: function (options) {
+			var options = langx.mixin({}, CarouselView.prototype.options, options);
+			this.overrided(options);
+		}
+
+	});
+
+	Gallery.installPlugin("views", {
+		"name": "carousel",
+		"ctor": CarouselView,
+		"templates": {
+			"default": '<div class="slides"></div>' +
+				'<h3 class="title"></h3>' +
+				'<a class="prev">‹</a>' +
+				'<a class="next">›</a>' +
+				'<a class="close">×</a>' +
+				'<a class="play-pause"></a>' +
+				'<ol class="indicator"></ol>'
+
+		}
+	});
+
+	return CarouselView;
+
+});
+define('skylark-blueimp-gallery/plugins/views/LightBoxView',[
+	'skylark-langx/langx',
+	'../../Gallery',
+	'./SliderView'
+], function (langx, Gallery, SliderView) {
+
+	var LightBoxView = SliderView.inherit({
+		klassName: "LightBoxView",
+		options: {
+			// Hide the page scrollbars:
+			hidePageScrollbars: false,
+
+			// The tag name, Id, element or querySelector of the indicator container:
+			indicatorContainer: 'ol',
+			// The class for the active indicator:
+			activeIndicatorClass: 'active',
+			// The list object property (or data attribute) with the thumbnail URL,
+			// used as alternative to a thumbnail child element:
+			thumbnailProperty: 'thumbnail',
+			// Defines if the gallery indicators should display a thumbnail:
+			thumbnailIndicators: true
+		},
+
+
+		initOptions: function (options) {
+			var options = langx.mixin({}, LightBoxView.prototype.options, options);
+			this.overrided(options);
+		},
+
+		createIndicator: function (obj) {
+			var gallery = this.gallery,
+				indicator = this.indicatorPrototype.cloneNode(false)
+			var title = gallery.getItemTitle(obj)
+			var thumbnailProperty = this.options.thumbnailProperty
+			var thumbnailUrl
+			var thumbnail
+			if (this.options.thumbnailIndicators) {
+				if (thumbnailProperty) {
+					thumbnailUrl = Gallery.getItemProperty(obj, thumbnailProperty)
+				}
+				if (thumbnailUrl === undefined) {
+					thumbnail = obj.getElementsByTagName && $(obj).find('img')[0]
+					if (thumbnail) {
+						thumbnailUrl = thumbnail.src
+					}
+				}
+				if (thumbnailUrl) {
+					indicator.style.backgroundImage = 'url("' + thumbnailUrl + '")'
+				}
+			}
+			if (title) {
+				indicator.title = title;
+			}
+			return indicator;
+		},
+
+		addIndicator: function (index) {
+			if (this.indicatorContainer.length) {
+				var indicator = this.createIndicator(this.list[index])
+				indicator.setAttribute('data-index', index)
+				this.indicatorContainer[0].appendChild(indicator)
+				this.indicators.push(indicator)
+			}
+		},
+
+		setActiveIndicator: function (index) {
+			if (this.indicators) {
+				if (this.activeIndicator) {
+					this.activeIndicator.removeClass(this.options.activeIndicatorClass)
+				}
+				this.activeIndicator = $(this.indicators[index])
+				this.activeIndicator.addClass(this.options.activeIndicatorClass)
+			}
+		},
+
+		initSlides: function (reload) {
+			if (!reload) {
+				this.indicatorContainer = this.container.find(
+					this.options.indicatorContainer
+				)
+				if (this.indicatorContainer.length) {
+					this.indicatorPrototype = document.createElement('li')
+					this.indicators = this.indicatorContainer[0].children
+				}
+			}
+			this.overrided(reload);
+		},
+
+		addSlide: function (index) {
+			this.overrided(index);
+			this.addIndicator(index)
+		},
+
+		resetSlides: function () {
+			this.overrided();
+			this.indicatorContainer.empty();
+			this.indicators = [];
+		},
+
+		handleClick: function (event) {
+			var target = event.target || event.srcElement
+			var parent = target.parentNode
+			if (parent === this.indicatorContainer[0]) {
+				// Click on indicator element
+				this.preventDefault(event)
+				this.slide(this.getNodeIndex(target))
+			} else if (parent.parentNode === this.indicatorContainer[0]) {
+				// Click on indicator child element
+				this.preventDefault(event)
+				this.slide(this.getNodeIndex(parent))
+			} else {
+				return this.overrided(event)
+			}
+		},
+
+		handleSlide: function (index) {
+			this.overrided(index)
+			this.setActiveIndicator(index)
+		},
+
+		handleClose: function () {
+			if (this.activeIndicator) {
+				this.activeIndicator.removeClass(this.options.activeIndicatorClass)
+			}
+			this.overrided();
+		}
+
+	});
+
+	Gallery.installPlugin("views", {
+		"name": "lightbox",
+		"ctor": LightBoxView,
+		"templates": {
+			"default": '<div class="slides"></div>' +
+				'<h3 class="title"></h3>' +
+				'<a class="prev">‹</a>' +
+				'<a class="next">›</a>' +
+				'<a class="close">×</a>' +
+				'<ol class="indicator"></ol>'
+		}
+	});
+
+	return LightBoxView;
+
+});
+define('skylark-blueimp-gallery/main',[
+    "./Gallery",
+    "./helper",
+    "./plugins/items/image",
+    "./plugins/items/video",
+    "./plugins/items/vimeo",
+    "./plugins/items/youtube",
+    "./plugins/views/SliderView",
+    "./plugins/views/CarouselView",
+    "./plugins/views/LightBoxView"
+], function (Gallery) {
+    return Gallery;
+});
+define('skylark-blueimp-gallery', ['skylark-blueimp-gallery/main'], function (main) { return main; });
+
+
+},this);
+//# sourceMappingURL=sourcemaps/skylark-blueimp-gallery.js.map

@@ -1,5 +1,5 @@
 {
-  "name": "skylark-ui-album",
+  "name": "skylark-blueimp-gallery",
   "version": "0.9.0",
   "description": "The skylark album widgets.",
   "main": "-",
@@ -10,20 +10,20 @@
   "homepage": "www.skylarkjs.org",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/skylarkui/skylark-ui-album.git"
+    "url": "git+https://github.com/skylark-integration/skylark-blueimp-gallery.git"
   },
   "keywords": [
-    "album",
+    "gallery",
     "skylark",
     "skylarkjs",
     "javacript",
     "library",
-    "utility",
+    "blueimp",
     "html5"
   ],
   "author": "Hudaokeji Co.,Ltd",
   "license": "MIT",
-  "bugs": "https://github.com/skylarkjs/skylark/issues",
+  "bugs": "https://github.com/skylark-integration/skylark-blueimp-gallery/issues",
   "dependencies": {
     "skylark-langx": "https://github.com/skylarklangx/skylark-langx#master",
     "skylark-utils-dom": "https://github.com/skylarkutils/skylark-utils-dom#master",
