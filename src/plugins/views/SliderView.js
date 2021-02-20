@@ -2,7 +2,7 @@
 
 define([
   'skylark-langx/langx',
-  'skylark-utils-dom/noder',
+  'skylark-domx-noder',
   '../../Gallery'
 ], function (langx, ndoer, Gallery) {
   'use strict'

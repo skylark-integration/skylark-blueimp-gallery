@@ -4,7 +4,7 @@
   "description": "The skylark album widgets.",
   "main": "-",
   "scripts": {
-    "build": "sbundle build .",
+    "build": "slib build .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "homepage": "www.skylarkjs.org",
@@ -25,9 +25,29 @@
   "license": "MIT",
   "bugs": "https://github.com/skylark-integration/skylark-blueimp-gallery/issues",
   "dependencies": {
-    "skylark-langx": "https://github.com/skylarklangx/skylark-langx#master",
-    "skylark-utils-dom": "https://github.com/skylarkutils/skylark-utils-dom#master",
-    "skylark-ui-swt": "https://github.com/skylarkui/skylark-ui-swt#master"
+    "skylark-langx": "https://github.com/skylark-langx/skylark-langx#master",
+    "skylark-domx": "https://github.com/skylark-domx/skylark-domx#master"
+  },
+  "skylarkjs": {
+    "directories": {
+      "dependencies": "./node_modules"
+    },
+    "secondaries": {},
+    "build": {
+      "prepare": {
+        "texttojs": [
+          "html",
+          "json",
+          "css"
+        ],
+        "jsxtojs": false,
+        "es6toamd": false,
+        "cjstoamd": false
+      },
+      "bundles": {
+        "all": true
+      }
+    }
   },
   "engines": {
     "node": ">=0.8.0"

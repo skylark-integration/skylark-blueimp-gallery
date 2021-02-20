@@ -75,7 +75,7 @@
   factory(define,require);
 
   if (!isAmd) {
-    var skylarkjs = require("skylark-langx/skylark");
+    var skylarkjs = require("skylark-langx-ns");
 
     if (isCmd) {
       module.exports = skylarkjs;
@@ -86,16 +86,53 @@
 
 })(function(define,require) {
 
-define('skylark-langx/skylark',[], function() {
-    var skylark = {
+define('skylark-langx-ns/_attach',[],function(){
+    return  function attach(obj1,path,obj2) {
+        if (typeof path == "string") {
+            path = path.split(".");//[path]
+        };
+        var length = path.length,
+            ns=obj1,
+            i=0,
+            name = path[i++];
 
+        while (i < length) {
+            ns = ns[name] = ns[name] || {};
+            name = path[i++];
+        }
+
+        return ns[name] = obj2;
+    }
+});
+define('skylark-langx-ns/ns',[
+    "./_attach"
+], function(_attach) {
+    var skylark = {
+    	attach : function(path,obj) {
+    		return _attach(skylark,path,obj);
+    	}
     };
     return skylark;
 });
 
-define('skylark-langx/types',[
-],function(){
-    var toString = {}.toString;
+define('skylark-langx-ns/main',[
+	"./ns"
+],function(skylark){
+	return skylark;
+});
+define('skylark-langx-ns', ['skylark-langx-ns/main'], function (main) { return main; });
+
+define('skylark-langx/skylark',[
+    "skylark-langx-ns"
+], function(ns) {
+	return ns;
+});
+
+define('skylark-langx-types/types',[
+    "skylark-langx-ns"
+],function(skylark){
+    var nativeIsArray = Array.isArray, 
+        toString = {}.toString;
     
     var type = (function() {
         var class2type = {};
@@ -111,9 +148,10 @@ define('skylark-langx/types',[
         };
     })();
 
-    function isArray(object) {
+ 
+    var  isArray = nativeIsArray || function(obj) {
         return object && object.constructor === Array;
-    }
+    };
 
 
     /**
@@ -156,7 +194,8 @@ define('skylark-langx/types',[
      * // => false
      */
     function isBoolean(obj) {
-        return typeof(obj) === "boolean";
+       return obj === true || obj === false || toString.call(obj) === '[object Boolean]';
+       //return typeof(obj) === "boolean";
     }
 
     function isDefined(obj) {
@@ -166,6 +205,11 @@ define('skylark-langx/types',[
     function isDocument(obj) {
         return obj != null && obj.nodeType == obj.DOCUMENT_NODE;
     }
+
+   // Is a given value a DOM element?
+    function isElement(obj) {
+        return !!(obj && obj.nodeType === 1);
+    }   
 
     function isEmptyObject(obj) {
         var name;
@@ -195,8 +239,10 @@ define('skylark-langx/types',[
         return type(value) == "function";
     }
 
+
+
     function isHtmlNode(obj) {
-        return obj && (obj instanceof Node);
+        return obj && obj.nodeType; // obj instanceof Node; //Consider the elements in IFRAME
     }
 
     function isInstanceOf( /*Object*/ value, /*Type*/ type) {
@@ -218,8 +264,8 @@ define('skylark-langx/types',[
         }
     }
 
-    function isNull(value) {
-      return type(value) === "null";
+    function isNull(obj) {
+        return obj === null;
     }
 
     function isNumber(obj) {
@@ -227,7 +273,9 @@ define('skylark-langx/types',[
     }
 
     function isObject(obj) {
-        return type(obj) == "object";
+        var type = typeof obj;
+        return type === 'function' || type === 'object' && !!obj;        
+        //return type(obj) == "object";
     }
 
     function isPlainObject(obj) {
@@ -270,11 +318,150 @@ define('skylark-langx/types',[
         (isObjectLike(value) && objectToString.call(value) == symbolTag);
     }
 
-    function isUndefined(value) {
-      return value === undefined
+    // Is a given variable undefined?
+    function isUndefined(obj) {
+        return obj === void 0;
     }
 
-    return {
+
+    var INFINITY = 1 / 0,
+        MAX_SAFE_INTEGER = 9007199254740991,
+        MAX_INTEGER = 1.7976931348623157e+308,
+        NAN = 0 / 0;
+
+    /** Used to match leading and trailing whitespace. */
+    var reTrim = /^\s+|\s+$/g;
+
+    /** Used to detect bad signed hexadecimal string values. */
+    var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
+
+    /** Used to detect binary string values. */
+    var reIsBinary = /^0b[01]+$/i;
+
+    /** Used to detect octal string values. */
+    var reIsOctal = /^0o[0-7]+$/i;
+
+    /** Used to detect unsigned integer values. */
+    var reIsUint = /^(?:0|[1-9]\d*)$/;
+
+    /** Built-in method references without a dependency on `root`. */
+    var freeParseInt = parseInt;
+
+    /**
+     * Converts `value` to a finite number.
+     *
+     * @static
+     * @memberOf _
+     * @since 4.12.0
+     * @category Lang
+     * @param {*} value The value to convert.
+     * @returns {number} Returns the converted number.
+     * @example
+     *
+     * _.toFinite(3.2);
+     * // => 3.2
+     *
+     * _.toFinite(Number.MIN_VALUE);
+     * // => 5e-324
+     *
+     * _.toFinite(Infinity);
+     * // => 1.7976931348623157e+308
+     *
+     * _.toFinite('3.2');
+     * // => 3.2
+     */
+    function toFinite(value) {
+      if (!value) {
+        return value === 0 ? value : 0;
+      }
+      value = toNumber(value);
+      if (value === INFINITY || value === -INFINITY) {
+        var sign = (value < 0 ? -1 : 1);
+        return sign * MAX_INTEGER;
+      }
+      return value === value ? value : 0;
+    }
+
+    /**
+     * Converts `value` to an integer.
+     *
+     * **Note:** This method is loosely based on
+     * [`ToInteger`](http://www.ecma-international.org/ecma-262/7.0/#sec-tointeger).
+     *
+     * @static
+     * @memberOf _
+     * @param {*} value The value to convert.
+     * @returns {number} Returns the converted integer.
+     * @example
+     *
+     * _.toInteger(3.2);
+     * // => 3
+     *
+     * _.toInteger(Number.MIN_VALUE);
+     * // => 0
+     *
+     * _.toInteger(Infinity);
+     * // => 1.7976931348623157e+308
+     *
+     * _.toInteger('3.2');
+     * // => 3
+     */
+    function toInteger(value) {
+      var result = toFinite(value),
+          remainder = result % 1;
+
+      return result === result ? (remainder ? result - remainder : result) : 0;
+    }   
+
+    /**
+     * Converts `value` to a number.
+     *
+     * @static
+     * @memberOf _
+     * @since 4.0.0
+     * @category Lang
+     * @param {*} value The value to process.
+     * @returns {number} Returns the number.
+     * @example
+     *
+     * _.toNumber(3.2);
+     * // => 3.2
+     *
+     * _.toNumber(Number.MIN_VALUE);
+     * // => 5e-324
+     *
+     * _.toNumber(Infinity);
+     * // => Infinity
+     *
+     * _.toNumber('3.2');
+     * // => 3.2
+     */
+    function toNumber(value) {
+      if (typeof value == 'number') {
+        return value;
+      }
+      if (isSymbol(value)) {
+        return NAN;
+      }
+      if (isObject(value)) {
+        var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
+        value = isObject(other) ? (other + '') : other;
+      }
+      if (typeof value != 'string') {
+        return value === 0 ? value : +value;
+      }
+      value = value.replace(reTrim, '');
+      var isBinary = reIsBinary.test(value);
+      return (isBinary || reIsOctal.test(value))
+        ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
+        : (reIsBadHex.test(value) ? NAN : +value);
+    }
+
+
+
+
+
+    return skylark.attach("langx.types",{
 
         isArray: isArray,
 
@@ -286,6 +473,8 @@ define('skylark-langx/types',[
 
         isDocument: isDocument,
 
+        isElement,
+
         isEmpty : isEmptyObject,
 
         isEmptyObject: isEmptyObject,
@@ -294,7 +483,12 @@ define('skylark-langx/types',[
 
         isHtmlNode: isHtmlNode,
 
+        isNaN : function (obj) {
+            return isNaN(obj);
+        },
+
         isNull: isNull,
+
 
         isNumber: isNumber,
 
@@ -314,356 +508,36 @@ define('skylark-langx/types',[
 
         isWindow: isWindow,
 
-        type: type
-    };
+        type: type,
+
+        toFinite : toFinite,
+        toNumber : toNumber,
+        toInteger : toInteger
+        
+    });
 
 });
-define('skylark-langx/arrays',[
-	"./types"
-],function(types,objects){
-	var filter = Array.prototype.filter,
-		isArrayLike = types.isArrayLike;
-
-    /**
-     * The base implementation of `_.findIndex` and `_.findLastIndex` without
-     * support for iteratee shorthands.
-     *
-     * @param {Array} array The array to inspect.
-     * @param {Function} predicate The function invoked per iteration.
-     * @param {number} fromIndex The index to search from.
-     * @param {boolean} [fromRight] Specify iterating from right to left.
-     * @returns {number} Returns the index of the matched value, else `-1`.
-     */
-    function baseFindIndex(array, predicate, fromIndex, fromRight) {
-      var length = array.length,
-          index = fromIndex + (fromRight ? 1 : -1);
-
-      while ((fromRight ? index-- : ++index < length)) {
-        if (predicate(array[index], index, array)) {
-          return index;
-        }
-      }
-      return -1;
-    }
-
-    /**
-     * The base implementation of `_.indexOf` without `fromIndex` bounds checks.
-     *
-     * @param {Array} array The array to inspect.
-     * @param {*} value The value to search for.
-     * @param {number} fromIndex The index to search from.
-     * @returns {number} Returns the index of the matched value, else `-1`.
-     */
-    function baseIndexOf(array, value, fromIndex) {
-      if (value !== value) {
-        return baseFindIndex(array, baseIsNaN, fromIndex);
-      }
-      var index = fromIndex - 1,
-          length = array.length;
-
-      while (++index < length) {
-        if (array[index] === value) {
-          return index;
-        }
-      }
-      return -1;
-    }
-
-    /**
-     * The base implementation of `isNaN` without support for number objects.
-     *
-     * @private
-     * @param {*} value The value to check.
-     * @returns {boolean} Returns `true` if `value` is `NaN`, else `false`.
-     */
-    function baseIsNaN(value) {
-      return value !== value;
-    }
-
-
-    function compact(array) {
-        return filter.call(array, function(item) {
-            return item != null;
-        });
-    }
-
-    function flatten(array) {
-        if (isArrayLike(array)) {
-            var result = [];
-            for (var i = 0; i < array.length; i++) {
-                var item = array[i];
-                if (isArrayLike(item)) {
-                    for (var j = 0; j < item.length; j++) {
-                        result.push(item[j]);
-                    }
-                } else {
-                    result.push(item);
-                }
-            }
-            return result;
-        } else {
-            return array;
-        }
-        //return array.length > 0 ? concat.apply([], array) : array;
-    }
-
-    function grep(array, callback) {
-        var out = [];
-
-        each(array, function(i, item) {
-            if (callback(item, i)) {
-                out.push(item);
-            }
-        });
-
-        return out;
-    }
-
-    function inArray(item, array) {
-        if (!array) {
-            return -1;
-        }
-        var i;
-
-        if (array.indexOf) {
-            return array.indexOf(item);
-        }
-
-        i = array.length;
-        while (i--) {
-            if (array[i] === item) {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    function makeArray(obj, offset, startWith) {
-       if (isArrayLike(obj) ) {
-        return (startWith || []).concat(Array.prototype.slice.call(obj, offset || 0));
-      }
-
-      // array of single index
-      return [ obj ];             
-    }
-
-
-    function forEach (arr, fn) {
-      if (arr.forEach) return arr.forEach(fn)
-      for (var i = 0; i < arr.length; i++) fn(arr[i], i);
-    }
-
-    function map(elements, callback) {
-        var value, values = [],
-            i, key
-        if (isArrayLike(elements))
-            for (i = 0; i < elements.length; i++) {
-                value = callback.call(elements[i], elements[i], i);
-                if (value != null) values.push(value)
-            }
-        else
-            for (key in elements) {
-                value = callback.call(elements[key], elements[key], key);
-                if (value != null) values.push(value)
-            }
-        return flatten(values)
-    }
-
-    function uniq(array) {
-        return filter.call(array, function(item, idx) {
-            return array.indexOf(item) == idx;
-        })
-    }
-
-    return {
-        baseFindIndex: baseFindIndex,
-
-        baseIndexOf : baseIndexOf,
-        
-        compact: compact,
-
-        first : function(items,n) {
-            if (n) {
-                return items.slice(0,n);
-            } else {
-                return items[0];
-            }
-        },
-
-        flatten: flatten,
-
-        inArray: inArray,
-
-        makeArray: makeArray,
-
-        forEach : forEach,
-
-        map : map,
-        
-        uniq : uniq
-
-    }
-});
-define('skylark-langx/numbers',[
+define('skylark-langx-types/main',[
 	"./types"
 ],function(types){
-	var isObject = types.isObject,
-		isSymbol = types.isSymbol;
-
-	var INFINITY = 1 / 0,
-	    MAX_SAFE_INTEGER = 9007199254740991,
-	    MAX_INTEGER = 1.7976931348623157e+308,
-	    NAN = 0 / 0;
-
-	/** Used to match leading and trailing whitespace. */
-	var reTrim = /^\s+|\s+$/g;
-
-	/** Used to detect bad signed hexadecimal string values. */
-	var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
-
-	/** Used to detect binary string values. */
-	var reIsBinary = /^0b[01]+$/i;
-
-	/** Used to detect octal string values. */
-	var reIsOctal = /^0o[0-7]+$/i;
-
-	/** Used to detect unsigned integer values. */
-	var reIsUint = /^(?:0|[1-9]\d*)$/;
-
-	/** Built-in method references without a dependency on `root`. */
-	var freeParseInt = parseInt;
-
-	/**
-	 * Converts `value` to a finite number.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.12.0
-	 * @category Lang
-	 * @param {*} value The value to convert.
-	 * @returns {number} Returns the converted number.
-	 * @example
-	 *
-	 * _.toFinite(3.2);
-	 * // => 3.2
-	 *
-	 * _.toFinite(Number.MIN_VALUE);
-	 * // => 5e-324
-	 *
-	 * _.toFinite(Infinity);
-	 * // => 1.7976931348623157e+308
-	 *
-	 * _.toFinite('3.2');
-	 * // => 3.2
-	 */
-	function toFinite(value) {
-	  if (!value) {
-	    return value === 0 ? value : 0;
-	  }
-	  value = toNumber(value);
-	  if (value === INFINITY || value === -INFINITY) {
-	    var sign = (value < 0 ? -1 : 1);
-	    return sign * MAX_INTEGER;
-	  }
-	  return value === value ? value : 0;
-	}
-
-	/**
-	 * Converts `value` to an integer.
-	 *
-	 * **Note:** This method is loosely based on
-	 * [`ToInteger`](http://www.ecma-international.org/ecma-262/7.0/#sec-tointeger).
-	 *
-	 * @static
-	 * @memberOf _
-	 * @param {*} value The value to convert.
-	 * @returns {number} Returns the converted integer.
-	 * @example
-	 *
-	 * _.toInteger(3.2);
-	 * // => 3
-	 *
-	 * _.toInteger(Number.MIN_VALUE);
-	 * // => 0
-	 *
-	 * _.toInteger(Infinity);
-	 * // => 1.7976931348623157e+308
-	 *
-	 * _.toInteger('3.2');
-	 * // => 3
-	 */
-	function toInteger(value) {
-	  var result = toFinite(value),
-	      remainder = result % 1;
-
-	  return result === result ? (remainder ? result - remainder : result) : 0;
-	}	
-
-	/**
-	 * Converts `value` to a number.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to process.
-	 * @returns {number} Returns the number.
-	 * @example
-	 *
-	 * _.toNumber(3.2);
-	 * // => 3.2
-	 *
-	 * _.toNumber(Number.MIN_VALUE);
-	 * // => 5e-324
-	 *
-	 * _.toNumber(Infinity);
-	 * // => Infinity
-	 *
-	 * _.toNumber('3.2');
-	 * // => 3.2
-	 */
-	function toNumber(value) {
-	  if (typeof value == 'number') {
-	    return value;
-	  }
-	  if (isSymbol(value)) {
-	    return NAN;
-	  }
-	  if (isObject(value)) {
-	    var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
-	    value = isObject(other) ? (other + '') : other;
-	  }
-	  if (typeof value != 'string') {
-	    return value === 0 ? value : +value;
-	  }
-	  value = value.replace(reTrim, '');
-	  var isBinary = reIsBinary.test(value);
-	  return (isBinary || reIsOctal.test(value))
-	    ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
-	    : (reIsBadHex.test(value) ? NAN : +value);
-	}
-
-	return  {
-		toFinite : toFinite,
-		toNumber : toNumber,
-		toInteger : toInteger
-	}
+	return types;
 });
-define('skylark-langx/objects',[
-	"./types",
-    "./numbers"
-],function(types,numbers){
-	var hasOwnProperty = Object.prototype.hasOwnProperty,
+define('skylark-langx-types', ['skylark-langx-types/main'], function (main) { return main; });
+
+define('skylark-langx-objects/objects',[
+    "skylark-langx-ns",
+    "skylark-langx-types"
+],function(skylark,types){
+    var hasOwnProperty = Object.prototype.hasOwnProperty,
         slice = Array.prototype.slice,
         isBoolean = types.isBoolean,
         isFunction = types.isFunction,
-		isObject = types.isObject,
-		isPlainObject = types.isPlainObject,
-		isArray = types.isArray,
+        isObject = types.isObject,
+        isPlainObject = types.isPlainObject,
+        isArray = types.isArray,
         isArrayLike = types.isArrayLike,
         isString = types.isString,
-        toInteger = numbers.toInteger;
+        toInteger = types.toInteger;
 
      // An internal function for creating assigner functions.
     function createAssigner(keysFunc, defaults) {
@@ -799,7 +673,7 @@ define('skylark-langx/objects',[
         return keys;
     }
 
-    function each(obj, callback) {
+    function each(obj, callback,isForEach) {
         var length, key, i, undef, value;
 
         if (obj) {
@@ -810,7 +684,7 @@ define('skylark-langx/objects',[
                 for (key in obj) {
                     if (obj.hasOwnProperty(key)) {
                         value = obj[key];
-                        if (callback.call(value, key, value) === false) {
+                        if ((isForEach ? callback.call(value, value, key) : callback.call(value, key, value) ) === false) {
                             break;
                         }
                     }
@@ -819,7 +693,7 @@ define('skylark-langx/objects',[
                 // Loop array items
                 for (i = 0; i < length; i++) {
                     value = obj[i];
-                    if (callback.call(value, i, value) === false) {
+                    if ((isForEach ? callback.call(value, value, i) : callback.call(value, i, value) )=== false) {
                         break;
                     }
                 }
@@ -938,13 +812,15 @@ define('skylark-langx/objects',[
             if (safe && target[key] !== undefined) {
                 continue;
             }
-            if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
-                if (isPlainObject(source[key]) && !isPlainObject(target[key])) {
+            // if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
+            //    if (isPlainObject(source[key]) && !isPlainObject(target[key])) {
+            if (deep && isPlainObject(source[key])) {
+                if (!isPlainObject(target[key])) {
                     target[key] = {};
                 }
-                if (isArray(source[key]) && !isArray(target[key])) {
-                    target[key] = [];
-                }
+                //if (isArray(source[key]) && !isArray(target[key])) {
+                //    target[key] = [];
+                //}
                 _mixin(target[key], source[key], deep, safe);
             } else if (source[key] !== undefined) {
                 target[key] = source[key]
@@ -975,6 +851,37 @@ define('skylark-langx/objects',[
             _mixin(args.target, source, args.deep, false);
         });
         return args.target;
+    }
+
+   // Return a copy of the object without the blacklisted properties.
+    function omit(obj, prop1,prop2) {
+        if (!obj) {
+            return null;
+        }
+        var result = mixin({},obj);
+        for(var i=1;i<arguments.length;i++) {
+            var pn = arguments[i];
+            if (pn in obj) {
+                delete result[pn];
+            }
+        }
+        return result;
+
+    }
+
+   // Return a copy of the object only containing the whitelisted properties.
+    function pick(obj,prop1,prop2) {
+        if (!obj) {
+            return null;
+        }
+        var result = {};
+        for(var i=1;i<arguments.length;i++) {
+            var pn = arguments[i];
+            if (pn in obj) {
+                result[pn] = obj[pn];
+            }
+        }
+        return result;
     }
 
     function removeItem(items, item) {
@@ -1026,7 +933,7 @@ define('skylark-langx/objects',[
 
     // Retrieve the values of an object's properties.
     function values(obj) {
-        var keys = _.keys(obj);
+        var keys = allKeys(obj);
         var length = keys.length;
         var values = Array(length);
         for (var i = 0; i < length; i++) {
@@ -1059,8 +966,18 @@ define('skylark-langx/objects',[
 
     }
 
-    return {
+    function scall(obj,method,arg1,arg2) {
+        if (obj && obj[method]) {
+            var args = slice.call(arguments, 2);
+
+            return obj[method].apply(obj,args);
+        }
+    }
+
+    return skylark.attach("langx.objects",{
         allKeys: allKeys,
+
+        attach : skylark.attach,
 
         clone: clone,
 
@@ -1082,23 +999,283 @@ define('skylark-langx/objects',[
 
         mixin: mixin,
 
+        omit: omit,
+
+        pick: pick,
+
         removeItem: removeItem,
 
         result : result,
         
         safeMixin: safeMixin,
 
-        values: values
-    };
+        scall,
 
+        values: values
+    });
 
 
 });
-define('skylark-langx/klass',[
-    "./arrays",
-    "./objects",
-    "./types"
-],function(arrays,objects,types){
+define('skylark-langx-objects/main',[
+	"./objects"
+],function(objects){
+	return objects;
+});
+define('skylark-langx-objects', ['skylark-langx-objects/main'], function (main) { return main; });
+
+define('skylark-langx-arrays/arrays',[
+  "skylark-langx-ns",
+  "skylark-langx-types",
+  "skylark-langx-objects"
+],function(skylark,types,objects){
+    var filter = Array.prototype.filter,
+        find = Array.prototype.find,
+        isArrayLike = types.isArrayLike;
+
+    /**
+     * The base implementation of `_.findIndex` and `_.findLastIndex` without
+     * support for iteratee shorthands.
+     *
+     * @param {Array} array The array to inspect.
+     * @param {Function} predicate The function invoked per iteration.
+     * @param {number} fromIndex The index to search from.
+     * @param {boolean} [fromRight] Specify iterating from right to left.
+     * @returns {number} Returns the index of the matched value, else `-1`.
+     */
+    function baseFindIndex(array, predicate, fromIndex, fromRight) {
+      var length = array.length,
+          index = fromIndex + (fromRight ? 1 : -1);
+
+      while ((fromRight ? index-- : ++index < length)) {
+        if (predicate(array[index], index, array)) {
+          return index;
+        }
+      }
+      return -1;
+    }
+
+    /**
+     * The base implementation of `_.indexOf` without `fromIndex` bounds checks.
+     *
+     * @param {Array} array The array to inspect.
+     * @param {*} value The value to search for.
+     * @param {number} fromIndex The index to search from.
+     * @returns {number} Returns the index of the matched value, else `-1`.
+     */
+    function baseIndexOf(array, value, fromIndex) {
+      if (value !== value) {
+        return baseFindIndex(array, baseIsNaN, fromIndex);
+      }
+      var index = fromIndex - 1,
+          length = array.length;
+
+      while (++index < length) {
+        if (array[index] === value) {
+          return index;
+        }
+      }
+      return -1;
+    }
+
+    /**
+     * The base implementation of `isNaN` without support for number objects.
+     *
+     * @private
+     * @param {*} value The value to check.
+     * @returns {boolean} Returns `true` if `value` is `NaN`, else `false`.
+     */
+    function baseIsNaN(value) {
+      return value !== value;
+    }
+
+
+    function compact(array) {
+        return filter.call(array, function(item) {
+            return item != null;
+        });
+    }
+
+    function filter2(array,func) {
+      return filter.call(array,func);
+    }
+
+    function flatten(array) {
+        if (isArrayLike(array)) {
+            var result = [];
+            for (var i = 0; i < array.length; i++) {
+                var item = array[i];
+                if (isArrayLike(item)) {
+                    for (var j = 0; j < item.length; j++) {
+                        result.push(item[j]);
+                    }
+                } else {
+                    result.push(item);
+                }
+            }
+            return result;
+        } else {
+            return array;
+        }
+        //return array.length > 0 ? concat.apply([], array) : array;
+    }
+
+    function grep(array, callback) {
+        var out = [];
+
+        objects.each(array, function(i, item) {
+            if (callback(item, i)) {
+                out.push(item);
+            }
+        });
+
+        return out;
+    }
+
+    function inArray(item, array) {
+        if (!array) {
+            return -1;
+        }
+        var i;
+
+        if (array.indexOf) {
+            return array.indexOf(item);
+        }
+
+        i = array.length;
+        while (i--) {
+            if (array[i] === item) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    function makeArray(obj, offset, startWith) {
+       if (isArrayLike(obj) ) {
+        return (startWith || []).concat(Array.prototype.slice.call(obj, offset || 0));
+      }
+
+      // array of single index
+      return [ obj ];             
+    }
+
+
+    function forEach (arr, fn) {
+      if (arr.forEach) return arr.forEach(fn)
+      for (var i = 0; i < arr.length; i++) fn(arr[i], i);
+    }
+
+    function map(elements, callback) {
+        var value, values = [],
+            i, key
+        if (isArrayLike(elements))
+            for (i = 0; i < elements.length; i++) {
+                value = callback.call(elements[i], elements[i], i);
+                if (value != null) values.push(value)
+            }
+        else
+            for (key in elements) {
+                value = callback.call(elements[key], elements[key], key);
+                if (value != null) values.push(value)
+            }
+        return flatten(values)
+    }
+
+
+    function merge( first, second ) {
+      var l = second.length,
+          i = first.length,
+          j = 0;
+
+      if ( typeof l === "number" ) {
+        for ( ; j < l; j++ ) {
+          first[ i++ ] = second[ j ];
+        }
+      } else {
+        while ( second[j] !== undefined ) {
+          first[ i++ ] = second[ j++ ];
+        }
+      }
+
+      first.length = i;
+
+      return first;
+    }
+
+    function reduce(array,callback,initialValue) {
+        return Array.prototype.reduce.call(array,callback,initialValue);
+    }
+
+    function uniq(array) {
+        return filter.call(array, function(item, idx) {
+            return array.indexOf(item) == idx;
+        })
+    }
+
+    function find2(array,func) {
+      return find.call(array,func);
+    }
+
+    return skylark.attach("langx.arrays",{
+        baseFindIndex: baseFindIndex,
+
+        baseIndexOf : baseIndexOf,
+        
+        compact: compact,
+
+        first : function(items,n) {
+            if (n) {
+                return items.slice(0,n);
+            } else {
+                return items[0];
+            }
+        },
+
+        filter : filter2,
+
+        find : find2,
+        
+        flatten: flatten,
+
+        grep: grep,
+
+        inArray: inArray,
+
+        makeArray: makeArray, // 
+
+        toArray : makeArray,
+
+        merge : merge,
+
+        forEach : forEach,
+
+        map : map,
+        
+        reduce : reduce,
+
+        uniq : uniq
+
+    });
+});
+define('skylark-langx-arrays/main',[
+	"./arrays"
+],function(arrays){
+	return arrays;
+});
+define('skylark-langx-arrays', ['skylark-langx-arrays/main'], function (main) { return main; });
+
+define('skylark-langx/arrays',[
+	"skylark-langx-arrays"
+],function(arrays){
+  return arrays;
+});
+define('skylark-langx-klass/klass',[
+  "skylark-langx-ns",
+  "skylark-langx-types",
+  "skylark-langx-objects",
+  "skylark-langx-arrays",
+],function(skylark,types,objects,arrays){
     var uniq = arrays.uniq,
         has = objects.has,
         mixin = objects.mixin,
@@ -1342,7 +1519,19 @@ let longEar = klass({
 
     var createClass = f1();
 
-    return createClass;
+    return skylark.attach("langx.klass",createClass);
+});
+define('skylark-langx-klass/main',[
+	"./klass"
+],function(klass){
+	return klass;
+});
+define('skylark-langx-klass', ['skylark-langx-klass/main'], function (main) { return main; });
+
+define('skylark-langx/klass',[
+    "skylark-langx-klass"
+],function(klass){
+    return klass;
 });
 define('skylark-langx/ArrayStore',[
     "./klass"
@@ -1688,8 +1877,9 @@ define('skylark-langx/ArrayStore',[
 
 	return ArrayStore;
 });
-define('skylark-langx/aspect',[
-],function(){
+define('skylark-langx-aspect/aspect',[
+    "skylark-langx-ns"
+],function(skylark){
 
   var undefined, nextId = 0;
     function advise(dispatcher, type, advice, receiveArguments){
@@ -1805,34 +1995,236 @@ define('skylark-langx/aspect',[
         };
     }
 
-    return {
+    return skylark.attach("langx.aspect",{
         after: aspect("after"),
  
         around: aspect("around"),
         
         before: aspect("before")
-    };
+    });
 });
-define('skylark-langx/funcs',[
-    "./objects",
-	"./types"
-],function(objects,types){
-	var mixin = objects.mixin,
-        slice = Array.prototype.slice,
-        isFunction = types.isFunction,
-        isString = types.isString;
+define('skylark-langx-aspect/main',[
+	"./aspect"
+],function(aspect){
+	return aspect;
+});
+define('skylark-langx-aspect', ['skylark-langx-aspect/main'], function (main) { return main; });
 
-    function defer(fn) {
-        if (requestAnimationFrame) {
-            requestAnimationFrame(fn);
-        } else {
-            setTimeoutout(fn);
-        }
-        return this;
-    }
+define('skylark-langx/aspect',[
+    "skylark-langx-aspect"
+],function(aspect){
+  return aspect;
+});
+define('skylark-langx-funcs/funcs',[
+  "skylark-langx-ns",
+],function(skylark,types,objects){
+        
+
+
 
     function noop() {
     }
+
+
+
+
+    return skylark.attach("langx.funcs",{
+        noop : noop,
+
+        returnTrue: function() {
+            return true;
+        },
+
+        returnFalse: function() {
+            return false;
+        }
+
+    });
+});
+define('skylark-langx-funcs/debounce',[
+	"./funcs"
+],function(funcs){
+   
+    function debounce(fn, wait) {
+        var timeout;
+        return function () {
+            var context = this, args = arguments;
+            var later = function () {
+                timeout = null;
+                fn.apply(context, args);
+            };
+
+            function stop() {
+                if (timeout) clearTimeout(timeout);
+                timeout = void 0;
+            }
+
+            stop();
+            timeout = setTimeout(later, wait);
+
+            return {
+                stop 
+            };
+        };
+    }
+
+    return funcs.debounce = debounce;
+
+});
+define('skylark-langx-funcs/defer',[
+    "./funcs"
+],function(funcs){
+    function defer(fn) {
+        var ret = {
+            stop : null
+        },
+        id ;
+        if (requestAnimationFrame) {
+            id = requestAnimationFrame(fn);
+            ret.stop = function() {
+                return cancelAnimationFrame(id);
+            };
+        } else {
+            id = setTimeoutout(fn);
+            ret.stop = function() {
+                return clearTimeout(id);
+            };
+        }
+        return ret;
+    }
+
+    return funcs.defer = defer;
+});
+define('skylark-langx-funcs/delegate',[
+  "skylark-langx-objects",
+  "./funcs"
+],function(objects,funcs){
+	var mixin = objects.mixin;
+
+    var delegate = (function() {
+        // boodman/crockford delegation w/ cornford optimization
+        function TMP() {}
+        return function(obj, props) {
+            TMP.prototype = obj;
+            var tmp = new TMP();
+            TMP.prototype = null;
+            if (props) {
+                mixin(tmp, props);
+            }
+            return tmp; // Object
+        };
+    })();
+
+    return funcs.delegate = delegate;
+
+});
+define('skylark-langx-funcs/loop',[
+	"./funcs"
+],function(funcs){
+
+	/**
+	 * Animation timer is a special type of timer that uses the requestAnimationFrame method.
+	 *
+	 * This timer calls the method with the same rate as the screen refesh rate.
+	 * 
+	 * Loop time can be changed dinamically.
+	 *
+	 * @class AnimationTimer
+	 * @param {Function} callback Timer callback function.
+	 */
+	function AnimationTimer(callback)
+	{
+		this.callback = callback;
+
+		this.running = false;
+		this.id = -1;
+	}
+
+	/**
+	 * Start timer, is the timer is already running dosen't do anything.
+	 * 
+	 * @method start
+	 */
+	AnimationTimer.prototype.start = function()
+	{
+		if(this.running)
+		{
+			return;
+		}
+
+		this.running = true;
+
+		var self = this;
+		function run()
+		{
+			self.callback();
+
+			if(self.running)
+			{
+				self.id = requestAnimationFrame(run);
+			}
+		}
+
+		run();
+	};
+
+	/**
+	 * Stop animation timer.
+	 * 
+	 * @method stop
+	 */
+	AnimationTimer.prototype.stop = function()
+	{
+		this.running = false;
+		cancelAnimationFrame(this.id);
+	};
+
+	function loop(fn) {
+		return new AnimationTimer(fn);
+    }
+
+    return funcs.loop = loop;
+});
+define('skylark-langx-funcs/negate',[
+	"./funcs"
+],function(funcs){
+   
+    /**
+     * Creates a function that negates the result of the predicate `func`. The
+     * `func` predicate is invoked with the `this` binding and arguments of the
+     * created function.
+     * @category Function
+     * @param {Function} predicate The predicate to negate.
+     * @returns {Function} Returns the new negated function.
+     * @example
+     *
+     * function isEven(n) {
+     *   return n % 2 == 0
+     * }
+     *
+     * filter([1, 2, 3, 4, 5, 6], negate(isEven))
+     * // => [1, 3, 5]
+     */
+    function negate(predicate) {
+      if (typeof predicate !== 'function') {
+        throw new TypeError('Expected a function')
+      }
+      return function(...args) {
+        return !predicate.apply(this, args)
+      }
+    }
+
+
+    return funcs.negate = negate;
+
+});
+define('skylark-langx-funcs/proxy',[
+  "skylark-langx-types",
+	"./funcs"
+],function(types,funcs){
+    var slice = Array.prototype.slice,
+        isFunction = types.isFunction,
+        isString = types.isString;
 
     function proxy(fn, context) {
         var args = (2 in arguments) && slice.call(arguments, 2)
@@ -1853,129 +2245,129 @@ define('skylark-langx/funcs',[
         }
     }
 
-    function debounce(fn, wait) {
-        var timeout;
-        return function () {
-            var context = this, args = arguments;
-            var later = function () {
-                timeout = null;
-                fn.apply(context, args);
-            };
-            if (timeout) clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-   
-    var delegate = (function() {
-        // boodman/crockford delegation w/ cornford optimization
-        function TMP() {}
-        return function(obj, props) {
-            TMP.prototype = obj;
-            var tmp = new TMP();
-            TMP.prototype = null;
-            if (props) {
-                mixin(tmp, props);
-            }
-            return tmp; // Object
-        };
-    })();
+    return funcs.bind = funcs.proxy = proxy;
 
-  var templateSettings = {
-    evaluate: /<%([\s\S]+?)%>/g,
-    interpolate: /<%=([\s\S]+?)%>/g,
-    escape: /<%-([\s\S]+?)%>/g
-  };
-
-
-  function template(text, settings, oldSettings) {
-    if (!settings && oldSettings) settings = oldSettings;
-    settings = objects.defaults({}, settings,templateSettings);
-
-    // Combine delimiters into one regular expression via alternation.
-    var matcher = RegExp([
-      (settings.escape || noMatch).source,
-      (settings.interpolate || noMatch).source,
-      (settings.evaluate || noMatch).source
-    ].join('|') + '|$', 'g');
-
-    // Compile the template source, escaping string literals appropriately.
-    var index = 0;
-    var source = "__p+='";
-    text.replace(matcher, function(match, escape, interpolate, evaluate, offset) {
-      source += text.slice(index, offset).replace(escapeRegExp, escapeChar);
-      index = offset + match.length;
-
-      if (escape) {
-        source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
-      } else if (interpolate) {
-        source += "'+\n((__t=(" + interpolate + "))==null?'':__t)+\n'";
-      } else if (evaluate) {
-        source += "';\n" + evaluate + "\n__p+='";
-      }
-
-      // Adobe VMs need the match returned to produce the correct offset.
-      return match;
-    });
-    source += "';\n";
-
-    // If a variable is not specified, place data values in local scope.
-    if (!settings.variable) source = 'with(obj||{}){\n' + source + '}\n';
-
-    source = "var __t,__p='',__j=Array.prototype.join," +
-      "print=function(){__p+=__j.call(arguments,'');};\n" +
-      source + 'return __p;\n';
-
-    var render;
-    try {
-      render = new Function(settings.variable || 'obj', '_', source);
-    } catch (e) {
-      e.source = source;
-      throw e;
-    }
-
-    var template = function(data) {
-      return render.call(this, data, _);
-    };
-
-    // Provide the compiled source as a convenience for precompilation.
-    var argument = settings.variable || 'obj';
-    template.source = 'function(' + argument + '){\n' + source + '}';
-
-    return template;
-  };
-
-    return {
-        debounce: debounce,
-
-        delegate: delegate,
-
-        defer: defer,
-
-        noop : noop,
-
-        proxy: proxy,
-
-        returnTrue: function() {
-            return true;
-        },
-
-        returnFalse: function() {
-            return false;
-        },
-
-        templateSettings : templateSettings,
-        template : template
-    };
 });
-define('skylark-langx/Deferred',[
-    "./arrays",
+define('skylark-langx-funcs/template',[
+	"./funcs"
+],function(funcs){
+    var slice = Array.prototype.slice;
+
+   
+    // By default, Underscore uses ERB-style template delimiters, change the
+    // following template settings to use alternative delimiters.
+    var templateSettings = {
+        evaluate: /<%([\s\S]+?)%>/g,
+        interpolate: /<%=([\s\S]+?)%>/g,
+        escape: /<%-([\s\S]+?)%>/g
+    };
+
+    // When customizing `templateSettings`, if you don't want to define an
+    // interpolation, evaluation or escaping regex, we need one that is
+    // guaranteed not to match.
+    var noMatch = /(.)^/;
+
+
+    // Certain characters need to be escaped so that they can be put into a
+    // string literal.
+    var escapes = {
+      "'":      "'",
+      '\\':     '\\',
+      '\r':     'r',
+      '\n':     'n',
+      '\t':     't',
+      '\u2028': 'u2028',
+      '\u2029': 'u2029'
+    };
+
+    var escaper = /\\|'|\r|\n|\t|\u2028|\u2029/g;
+
+
+    function template(text, data, settings) {
+        var render;
+        settings = objects.defaults({}, settings,templateSettings);
+
+        // Combine delimiters into one regular expression via alternation.
+        var matcher = RegExp([
+          (settings.escape || noMatch).source,
+          (settings.interpolate || noMatch).source,
+          (settings.evaluate || noMatch).source
+        ].join('|') + '|$', 'g');
+
+        // Compile the template source, escaping string literals appropriately.
+        var index = 0;
+        var source = "__p+='";
+        text.replace(matcher, function(match, escape, interpolate, evaluate, offset) {
+          source += text.slice(index, offset)
+              .replace(escaper, function(match) { return '\\' + escapes[match]; });
+
+          if (escape) {
+            source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
+          }
+          if (interpolate) {
+            source += "'+\n((__t=(" + interpolate + "))==null?'':__t)+\n'";
+          }
+          if (evaluate) {
+            source += "';\n" + evaluate + "\n__p+='";
+          }
+          index = offset + match.length;
+          return match;
+        });
+        source += "';\n";
+
+        // If a variable is not specified, place data values in local scope.
+        if (!settings.variable) source = 'with(obj||{}){\n' + source + '}\n';
+
+        source = "var __t,__p='',__j=Array.prototype.join," +
+          "print=function(){__p+=__j.call(arguments,'');};\n" +
+          source + 'return __p;\n';
+
+        try {
+          render = new Function(settings.variable || 'obj', '_', source);
+        } catch (e) {
+          e.source = source;
+          throw e;
+        }
+
+        if (data) {
+          return render(data,this)
+        }
+        var template = proxy(function(data) {
+          return render.call(this, data,this);
+        },this);
+
+        // Provide the compiled source as a convenience for precompilation.
+        var argument = settings.variable || 'obj';
+        template.source = 'function(' + argument + '){\n' + source + '}';
+
+        return template;
+    }
+
+    template.templateSettings = funcs.templateSettings = templateSettings;
+
+    return funcs.template = template;
+
+});
+define('skylark-langx-funcs/main',[
 	"./funcs",
-    "./objects"
+	"./debounce",
+	"./defer",
+	"./delegate",
+	"./loop",
+	"./negate",
+	"./proxy",
+	"./template"
+],function(funcs){
+	return funcs;
+});
+define('skylark-langx-funcs', ['skylark-langx-funcs/main'], function (main) { return main; });
+
+define('skylark-langx-async/Deferred',[
+    "skylark-langx-arrays",
+	"skylark-langx-funcs",
+    "skylark-langx-objects"
 ],function(arrays,funcs,objects){
     "use strict";
-    
-    var  PGLISTENERS = Symbol ? Symbol() : '__pglisteners',
-         PGNOTIFIES = Symbol ? Symbol() : '__pgnotifies';
 
     var slice = Array.prototype.slice,
         proxy = funcs.proxy,
@@ -2007,15 +2399,15 @@ define('skylark-langx/Deferred',[
 
     var Deferred = function() {
         var self = this,
-            p = this.promise = new Promise(function(resolve, reject) {
+            p = this.promise = makePromise2(new Promise(function(resolve, reject) {
                 self._resolve = resolve;
                 self._reject = reject;
-            });
+            }));
 
-        wrapPromise(p,self);
+        //wrapPromise(p,self);
 
-        this[PGLISTENERS] = [];
-        this[PGNOTIFIES] = [];
+        //this[PGLISTENERS] = [];
+        //this[PGNOTIFIES] = [];
 
         //this.resolve = Deferred.prototype.resolve.bind(this);
         //this.reject = Deferred.prototype.reject.bind(this);
@@ -2023,52 +2415,97 @@ define('skylark-langx/Deferred',[
 
     };
 
-    function wrapPromise(p,d) {
-        var   added = {
-                state : function() {
-                    if (d.isResolved()) {
-                        return 'resolved';
+   
+    function makePromise2(promise) {
+        // Don't modify any promise that has been already modified.
+        if (promise.isResolved) return promise;
+
+        // Set initial state
+        var isPending = true;
+        var isRejected = false;
+        var isResolved = false;
+
+        // Observe the promise, saving the fulfillment in a closure scope.
+        var result = promise.then(
+            function(v) {
+                isResolved = true;
+                isPending = false;
+                return v; 
+            }, 
+            function(e) {
+                isRejected = true;
+                isPending = false;
+                throw e; 
+            }
+        );
+
+        result.isResolved = function() { return isResolved; };
+        result.isPending = function() { return isPending; };
+        result.isRejected = function() { return isRejected; };
+
+        result.state = function() {
+            if (isResolved) {
+                return 'resolved';
+            }
+            if (isRejected) {
+                return 'rejected';
+            }
+            return 'pending';
+        };
+
+        var notified = [],
+            listeners = [];
+
+          
+        result.then = function(onResolved,onRejected,onProgress) {
+            if (onProgress) {
+                this.progress(onProgress);
+            }
+            return makePromise2(Promise.prototype.then.call(this,
+                onResolved && function(args) {
+                    if (args && args.__ctx__ !== undefined) {
+                        return onResolved.apply(args.__ctx__,args);
+                    } else {
+                        return onResolved(args);
                     }
-                    if (d.isRejected()) {
-                        return 'rejected';
-                    }
-                    return 'pending';
                 },
-                then : function(onResolved,onRejected,onProgress) {
-                    if (onProgress) {
-                        this.progress(onProgress);
+                onRejected && function(args){
+                    if (args && args.__ctx__ !== undefined) {
+                        return onRejected.apply(args.__ctx__,args);
+                    } else {
+                        return onRejected(args);
                     }
-                    return wrapPromise(Promise.prototype.then.call(this,
-                            onResolved && function(args) {
-                                if (args && args.__ctx__ !== undefined) {
-                                    return onResolved.apply(args.__ctx__,args);
-                                } else {
-                                    return onResolved(args);
-                                }
-                            },
-                            onRejected && function(args){
-                                if (args && args.__ctx__ !== undefined) {
-                                    return onRejected.apply(args.__ctx__,args);
-                                } else {
-                                    return onRejected(args);
-                                }
-                            }));
-                },
-                progress : function(handler) {
-                    d[PGNOTIFIES].forEach(function (value) {
-                        handler(value);
-                    });
-                    d[PGLISTENERS].push(handler);
-                    return this;
                 }
+            ));
+        };
 
-            };
+        result.progress = function(handler) {
+            notified.forEach(function (value) {
+                handler(value);
+            });
+            listeners.push(handler);
+            return this;
+        };
 
-        added.pipe = added.then;
-        return mixin(p,added);
+        result.pipe = result.then;
 
+        result.notify = function(value) {
+            try {
+                notified.push(value);
+
+                return listeners.forEach(function (listener) {
+                    return listener(value);
+                });
+            } catch (error) {
+            this.reject(error);
+            }
+            return this;
+        };
+
+        return result;
     }
 
+ 
     Deferred.prototype.resolve = function(value) {
         var args = slice.call(arguments);
         return this.resolveWith(null,args);
@@ -2083,15 +2520,8 @@ define('skylark-langx/Deferred',[
     };
 
     Deferred.prototype.notify = function(value) {
-        try {
-            this[PGNOTIFIES].push(value);
-
-            return this[PGLISTENERS].forEach(function (listener) {
-                return listener(value);
-            });
-        } catch (error) {
-          this.reject(error);
-        }
+        var p = result(this,"promise");
+        p.notify(value);
         return this;
     };
 
@@ -2109,11 +2539,18 @@ define('skylark-langx/Deferred',[
     };
 
     Deferred.prototype.isResolved = function() {
-        return !!this._resolved;
+        var p = result(this,"promise");
+        return p.isResolved();
     };
 
     Deferred.prototype.isRejected = function() {
-        return !!this._rejected;
+        var p = result(this,"promise");
+        return p.isRejected();
+    };
+
+    Deferred.prototype.state = function() {
+        var p = result(this,"promise");
+        return p.state();
     };
 
     Deferred.prototype.then = function(callback, errback, progback) {
@@ -2132,14 +2569,22 @@ define('skylark-langx/Deferred',[
     };
 
 
+    Deferred.prototype.always  = function() {
+        var p = result(this,"promise");
+        p.always.apply(p,arguments);
+        return this;
+    };
+
     Deferred.prototype.done  = function() {
         var p = result(this,"promise");
-        return p.done.apply(p,arguments);
+        p.done.apply(p,arguments);
+        return this;
     };
 
     Deferred.prototype.fail = function(errback) {
         var p = result(this,"promise");
-        return p.fail(errback);
+        p.fail(errback);
+        return this;
     };
 
 
@@ -2151,7 +2596,7 @@ define('skylark-langx/Deferred',[
     };
 
     Deferred.first = function(array) {
-        return wrapPromise(Promise.race(array));
+        return makePromise2(Promise.race(array));
     };
 
 
@@ -2191,15 +2636,27 @@ define('skylark-langx/Deferred',[
 
     Deferred.immediate = Deferred.resolve;
 
+
+    Deferred.promise = function(callback) {
+        var d = new Deferred();
+
+        callback(d.resolve.bind(d),d.reject.bind(d),d.progress.bind(d));
+
+        return d.promise;
+    };
+
     return Deferred;
 });
-define('skylark-langx/async',[
-    "./Deferred",
-    "./objects"
-],function(Deferred,objects){
+define('skylark-langx-async/async',[
+    "skylark-langx-ns",
+    "skylark-langx-objects",
+    "./Deferred"
+],function(skylark,objects,Deferred){
     var each = objects.each;
     
     var async = {
+        Deferred : Deferred,
+
         parallel : function(arr,args,ctx) {
             var rets = [];
             ctx = ctx || null;
@@ -2247,9 +2704,125 @@ define('skylark-langx/async',[
         }
     };
 
-	return async;	
+	return skylark.attach("langx.async",async);	
 });
-define('skylark-langx/datetimes',[],function(){
+define('skylark-langx-async/main',[
+	"./async"
+],function(async){
+	return async;
+});
+define('skylark-langx-async', ['skylark-langx-async/main'], function (main) { return main; });
+
+define('skylark-langx/async',[
+    "skylark-langx-async"
+],function(async){
+    return async;
+});
+define('skylark-langx-binary/binary',[
+  "skylark-langx-ns",
+],function(skylark){
+	"use strict";
+
+
+	/**
+	 * Create arraybuffer from binary string
+	 *
+	 * @method fromBinaryString
+	 * @param {String} str
+	 * @return {Arraybuffer} data
+	 */
+	function fromBinaryString(str) {
+		var length = str.length;
+		var arraybuffer = new ArrayBuffer(length);
+		var view = new Uint8Array(arraybuffer);
+
+		for(var i = 0; i < length; i++)
+		{
+			view[i] = str.charCodeAt(i);
+		}
+
+		return arraybuffer;
+	}
+
+	/**
+	 * Create arraybuffer from base64 string
+	 *
+	 * @method fromBase64
+	 * @param {String} base64
+	 * @return {Arraybuffer} data
+	 */
+	function fromBase64(str){
+		var encoding = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+		var length = str.length / 4 * 3;
+		var arraybuffer = new ArrayBuffer(length);
+		var view = new Uint8Array(arraybuffer);
+
+		var a, b, c, d;
+
+		for(var i = 0, j = 0; i < length; i += 3)
+		{
+			a = encoding.indexOf(str.charAt(j++));
+			b = encoding.indexOf(str.charAt(j++));
+			c = encoding.indexOf(str.charAt(j++));
+			d = encoding.indexOf(str.charAt(j++));
+
+			view[i] = (a << 2) | (b >> 4);
+			if(c !== 64)
+			{
+				view[i+1] = ((b & 15) << 4) | (c >> 2);
+			}
+			if(d !== 64)
+			{
+				view[i+2] = ((c & 3) << 6) | d;
+			}
+		}
+
+		return arraybuffer;
+	}
+
+	/**
+	 * Create arraybuffer from Nodejs buffer
+	 *
+	 * @method fromBuffer
+	 * @param {Buffer} buffer
+	 * @return {Arraybuffer} data
+	 */
+	function fromBuffer(buffer)	{
+		var array = new ArrayBuffer(buffer.length);
+		var view = new Uint8Array(array);
+
+		for(var i = 0; i < buffer.length; i++)
+		{
+			view[i] = buffer[i];
+		}
+
+		return array;
+
+		//Faster but the results is failing the "instanceof ArrayBuffer" test
+		//return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+	};
+
+	return skylark.attach("langx.binary",{
+		fromBase64,
+		fromBinaryString,
+		fromBuffer
+	});
+});
+define('skylark-langx-binary/main',[
+	"./binary"
+],function(binary){
+	return binary;
+});
+define('skylark-langx-binary', ['skylark-langx-binary/main'], function (main) { return main; });
+
+define('skylark-langx/binary',[
+	"skylark-langx-binary"
+],function(binary){
+  return binary;
+});
+define('skylark-langx-datetimes/datetimes',[
+    "skylark-langx-ns"
+],function(skylark){
      function parseMilliSeconds(str) {
 
         var strs = str.split(' ');
@@ -2308,136 +2881,391 @@ define('skylark-langx/datetimes',[],function(){
         }
     };
 	
-	return {
+	return skylark.attach("langx.datetimes",{
 		parseMilliSeconds
-	};
+	});
 });
-define('skylark-langx/Evented',[
-    "./klass",
-    "./arrays",
-    "./objects",
-	"./types"
-],function(klass,arrays,objects,types){
-	var slice = Array.prototype.slice,
+define('skylark-langx-datetimes/main',[
+	"./datetimes"
+],function(datetimes){
+	return datetimes;
+});
+define('skylark-langx-datetimes', ['skylark-langx-datetimes/main'], function (main) { return main; });
+
+define('skylark-langx/datetimes',[
+    "skylark-langx-datetimes"
+],function(datetimes){
+    return datetimes;
+});
+define('skylark-langx/Deferred',[
+    "skylark-langx-async"
+],function(async){
+    return async.Deferred;
+});
+define('skylark-langx-events/events',[
+	"skylark-langx-ns"
+],function(skylark){
+	return skylark.attach("langx.events",{});
+});
+define('skylark-langx-hoster/hoster',[
+    "skylark-langx-ns"
+],function(skylark){
+	// The javascript host environment, brower and nodejs are supported.
+	var hoster = {
+		"isBrowser" : true, // default
+		"isNode" : null,
+		"global" : this,
+		"browser" : null,
+		"node" : null
+	};
+
+	if (typeof process == "object" && process.versions && process.versions.node && process.versions.v8) {
+		hoster.isNode = true;
+		hoster.isBrowser = false;
+	}
+
+	hoster.global = (function(){
+		if (typeof global !== 'undefined' && typeof global !== 'function') {
+			// global spec defines a reference to the global object called 'global'
+			// https://github.com/tc39/proposal-global
+			// `global` is also defined in NodeJS
+			return global;
+		} else if (typeof window !== 'undefined') {
+			// window is defined in browsers
+			return window;
+		}
+		else if (typeof self !== 'undefined') {
+			// self is defined in WebWorkers
+			return self;
+		}
+		return this;
+	})();
+
+	var _document = null;
+
+	Object.defineProperty(hoster,"document",function(){
+		if (!_document) {
+			var w = typeof window === 'undefined' ? require('html-element') : window;
+			_document = w.document;
+		}
+
+		return _document;
+	});
+
+	if (hoster.global.CustomEvent === undefined) {
+		hoster.global.CustomEvent = function(type,props) {
+			this.type = type;
+			this.props = props;
+		};
+	}
+	Object.defineProperty(hoster,"document",function(){
+		if (!_document) {
+			var w = typeof window === 'undefined' ? require('html-element') : window;
+			_document = w.document;
+		}
+
+		return _document;
+	});
+
+	if (hoster.isBrowser) {
+	    function uaMatch( ua ) {
+		    ua = ua.toLowerCase();
+
+			//IE11OrLess = !!navigator.userAgent.match(/(?:Trident.*rv[ :]?11\.|msie|iemobile)/i),
+			//Edge = !!navigator.userAgent.match(/Edge/i),
+			//FireFox = !!navigator.userAgent.match(/firefox/i),
+			//Safari = !!(navigator.userAgent.match(/safari/i) && !navigator.userAgent.match(/chrome/i) && !navigator.userAgent.match(/android/i)),
+			//IOS = !!(navigator.userAgent.match(/iP(ad|od|hone)/i)),
+
+		    var match = /(chrome)[ \/]([\w.]+)/.exec( ua ) ||
+		      /(webkit)[ \/]([\w.]+)/.exec( ua ) ||
+		      /(opera)(?:.*version|)[ \/]([\w.]+)/.exec( ua ) ||
+		      /(msie) ([\w.]+)/.exec( ua ) ||
+		      ua.indexOf('compatible') < 0 && /(mozilla)(?:.*? rv:([\w.]+)|)/.exec( ua ) ||
+		      [];
+
+		    return {
+		      browser: match[ 1 ] || '',
+		      version: match[ 2 ] || '0'
+		    };
+	  	};
+
+	    var matched = uaMatch( navigator.userAgent );
+
+	    var browser = hoster.browser = {};
+
+	    if ( matched.browser ) {
+	      browser[ matched.browser ] = true;
+	      browser.version = matched.version;
+	    }
+
+	    // Chrome is Webkit, but Webkit is also Safari.
+	    if ( browser.chrome ) {
+	      browser.webkit = true;
+	    } else if ( browser.webkit ) {
+	      browser.safari = true;
+	    }
+	}
+
+	hoster.detects = {};
+
+	return  skylark.attach("langx.hoster",hoster);
+});
+define('skylark-langx-hoster/detects/mobile',[
+    "../hoster"
+],function(hoster){
+    //refer : https://github.com/kaimallea/isMobile
+
+    var appleIphone = /iPhone/i;
+    var appleIpod = /iPod/i;
+    var appleTablet = /iPad/i;
+    var appleUniversal = /\biOS-universal(?:.+)Mac\b/i;
+    var androidPhone = /\bAndroid(?:.+)Mobile\b/i;
+    var androidTablet = /Android/i;
+    var amazonPhone = /(?:SD4930UR|\bSilk(?:.+)Mobile\b)/i;
+    var amazonTablet = /Silk/i;
+    var windowsPhone = /Windows Phone/i;
+    var windowsTablet = /\bWindows(?:.+)ARM\b/i;
+    var otherBlackBerry = /BlackBerry/i;
+    var otherBlackBerry10 = /BB10/i;
+    var otherOpera = /Opera Mini/i;
+    var otherChrome = /\b(CriOS|Chrome)(?:.+)Mobile/i;
+    var otherFirefox = /Mobile(?:.+)Firefox\b/i;
+    var isAppleTabletOnIos13 = function (navigator) {
+        return (typeof navigator !== 'undefined' &&
+            navigator.platform === 'MacIntel' &&
+            typeof navigator.maxTouchPoints === 'number' &&
+            navigator.maxTouchPoints > 1 &&
+            typeof MSStream === 'undefined');
+    };
+    function createMatch(userAgent) {
+        return function (regex) { return regex.test(userAgent); };
+    }
+    
+    function detectMobile(param) {
+        var nav = {
+            userAgent: '',
+            platform: '',
+            maxTouchPoints: 0
+        };
+        if (!param && typeof navigator !== 'undefined') {
+            nav = {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                maxTouchPoints: navigator.maxTouchPoints || 0
+            };
+        }
+        else if (typeof param === 'string') {
+            nav.userAgent = param;
+        }
+        else if (param && param.userAgent) {
+            nav = {
+                userAgent: param.userAgent,
+                platform: param.platform,
+                maxTouchPoints: param.maxTouchPoints || 0
+            };
+        }
+        var userAgent = nav.userAgent;
+        var tmp = userAgent.split('[FBAN');
+        if (typeof tmp[1] !== 'undefined') {
+            userAgent = tmp[0];
+        }
+        tmp = userAgent.split('Twitter');
+        if (typeof tmp[1] !== 'undefined') {
+            userAgent = tmp[0];
+        }
+        var match = createMatch(userAgent);
+        var result = {
+            apple: {
+                phone: match(appleIphone) && !match(windowsPhone),
+                ipod: match(appleIpod),
+                tablet: !match(appleIphone) &&
+                    (match(appleTablet) || isAppleTabletOnIos13(nav)) &&
+                    !match(windowsPhone),
+                universal: match(appleUniversal),
+                device: (match(appleIphone) ||
+                    match(appleIpod) ||
+                    match(appleTablet) ||
+                    match(appleUniversal) ||
+                    isAppleTabletOnIos13(nav)) &&
+                    !match(windowsPhone)
+            },
+            amazon: {
+                phone: match(amazonPhone),
+                tablet: !match(amazonPhone) && match(amazonTablet),
+                device: match(amazonPhone) || match(amazonTablet)
+            },
+            android: {
+                phone: (!match(windowsPhone) && match(amazonPhone)) ||
+                    (!match(windowsPhone) && match(androidPhone)),
+                tablet: !match(windowsPhone) &&
+                    !match(amazonPhone) &&
+                    !match(androidPhone) &&
+                    (match(amazonTablet) || match(androidTablet)),
+                device: (!match(windowsPhone) &&
+                    (match(amazonPhone) ||
+                        match(amazonTablet) ||
+                        match(androidPhone) ||
+                        match(androidTablet))) ||
+                    match(/\bokhttp\b/i)
+            },
+            windows: {
+                phone: match(windowsPhone),
+                tablet: match(windowsTablet),
+                device: match(windowsPhone) || match(windowsTablet)
+            },
+            other: {
+                blackberry: match(otherBlackBerry),
+                blackberry10: match(otherBlackBerry10),
+                opera: match(otherOpera),
+                firefox: match(otherFirefox),
+                chrome: match(otherChrome),
+                device: match(otherBlackBerry) ||
+                    match(otherBlackBerry10) ||
+                    match(otherOpera) ||
+                    match(otherFirefox) ||
+                    match(otherChrome)
+            },
+            any: false,
+            phone: false,
+            tablet: false
+        };
+        result.any =
+            result.apple.device ||
+                result.android.device ||
+                result.windows.device ||
+                result.other.device;
+        result.phone =
+            result.apple.phone || result.android.phone || result.windows.phone;
+        result.tablet =
+            result.apple.tablet || result.android.tablet || result.windows.tablet;
+        return result;
+    }
+
+    return hoster.detects.mobile = detectMobile;
+});
+
+define('skylark-langx-hoster/isMobile',[
+    "./hoster",
+    "./detects/mobile"
+],function(hoster,detectMobile){
+    if (hoster.isMobile == undefined) {
+        hoster.isMobile = detectMobile();
+    }
+
+    return hoster.isMobile;
+});
+
+define('skylark-langx-hoster/main',[
+	"./hoster",
+	"./isMobile"
+],function(hoster){
+	return hoster;
+});
+define('skylark-langx-hoster', ['skylark-langx-hoster/main'], function (main) { return main; });
+
+define('skylark-langx-events/Event',[
+  "skylark-langx-objects",
+  "skylark-langx-funcs",
+  "skylark-langx-klass",
+  "skylark-langx-hoster",
+    "./events"
+],function(objects,funcs,klass,events){
+    var eventMethods = {
+        preventDefault: "isDefaultPrevented",
+        stopImmediatePropagation: "isImmediatePropagationStopped",
+        stopPropagation: "isPropagationStopped"
+     };
+        
+
+    function compatible(event, source) {
+        if (source || !event.isDefaultPrevented) {
+            if (!source) {
+                source = event;
+            }
+
+            objects.each(eventMethods, function(name, predicate) {
+                var sourceMethod = source[name];
+                event[name] = function() {
+                    this[predicate] = funcs.returnTrue;
+                    return sourceMethod && sourceMethod.apply(source, arguments);
+                }
+                event[predicate] = funcs.returnFalse;
+            });
+        }
+        return event;
+    }
+
+
+    /*
+    var Event = klass({
+        _construct : function(type,props) {
+            CustomEvent.call(this,type.props);
+            objects.safeMixin(this, props);
+            compatible(this);
+        }
+    },CustomEvent);
+    */
+
+    class Event extends CustomEvent {
+        constructor(type,props) {
+            super(type,props);
+            objects.safeMixin(this, props);
+            compatible(this);
+        } 
+    }
+
+
+    Event.compatible = compatible;
+
+    return events.Event = Event;
+    
+});
+define('skylark-langx-events/Listener',[
+  "skylark-langx-types",
+  "skylark-langx-objects",
+  "skylark-langx-arrays",
+  "skylark-langx-klass",
+  "./events",
+  "./Event"
+],function(types,objects,arrays,klass,events,Event){
+    var slice = Array.prototype.slice,
         compact = arrays.compact,
         isDefined = types.isDefined,
         isPlainObject = types.isPlainObject,
-		isFunction = types.isFunction,
-		isString = types.isString,
-		isEmptyObject = types.isEmptyObject,
-		mixin = objects.mixin;
+        isFunction = types.isFunction,
+        isBoolean = types.isBoolean,
+        isString = types.isString,
+        isEmptyObject = types.isEmptyObject,
+        mixin = objects.mixin,
+        safeMixin = objects.safeMixin;
 
-    var Evented = klass({
-        on: function(events, selector, data, callback, ctx, /*used internally*/ one) {
-            var self = this,
-                _hub = this._hub || (this._hub = {});
 
-            if (isPlainObject(events)) {
-                ctx = callback;
-                each(events, function(type, fn) {
-                    self.on(type, selector, data, fn, ctx, one);
-                });
-                return this;
-            }
-
-            if (!isString(selector) && !isFunction(callback)) {
-                ctx = callback;
-                callback = data;
-                data = selector;
-                selector = undefined;
-            }
-
-            if (isFunction(data)) {
-                ctx = callback;
-                callback = data;
-                data = null;
-            }
-
-            if (isString(events)) {
-                events = events.split(/\s/)
-            }
-
-            events.forEach(function(name) {
-                (_hub[name] || (_hub[name] = [])).push({
-                    fn: callback,
-                    selector: selector,
-                    data: data,
-                    ctx: ctx,
-                    one: one
-                });
-            });
-
-            return this;
-        },
-
-        one: function(events, selector, data, callback, ctx) {
-            return this.on(events, selector, data, callback, ctx, 1);
-        },
-
-        trigger: function(e /*,argument list*/ ) {
-            if (!this._hub) {
-                return this;
-            }
-
-            var self = this;
-
-            if (isString(e)) {
-                e = new CustomEvent(e);
-            }
-
-            Object.defineProperty(e,"target",{
-                value : this
-            });
-
-            var args = slice.call(arguments, 1);
-            if (isDefined(args)) {
-                args = [e].concat(args);
-            } else {
-                args = [e];
-            }
-            [e.type || e.name, "all"].forEach(function(eventName) {
-                var listeners = self._hub[eventName];
-                if (!listeners) {
-                    return;
-                }
-
-                var len = listeners.length,
-                    reCompact = false;
-
-                for (var i = 0; i < len; i++) {
-                    var listener = listeners[i];
-                    if (e.data) {
-                        if (listener.data) {
-                            e.data = mixin({}, listener.data, e.data);
-                        }
-                    } else {
-                        e.data = listener.data || null;
-                    }
-                    listener.fn.apply(listener.ctx, args);
-                    if (listener.one) {
-                        listeners[i] = null;
-                        reCompact = true;
-                    }
-                }
-
-                if (reCompact) {
-                    self._hub[eventName] = compact(listeners);
-                }
-
-            });
-            return this;
-        },
-
-        listened: function(event) {
-            var evtArr = ((this._hub || (this._events = {}))[event] || []);
-            return evtArr.length > 0;
-        },
+    var Listener = klass({
 
         listenTo: function(obj, event, callback, /*used internally*/ one) {
             if (!obj) {
                 return this;
             }
 
+            if (isBoolean(callback)) {
+                one = callback;
+                callback = null;
+            }
+
+            if (types.isPlainObject(event)){
+                //listenTo(obj,callbacks,one)
+                var callbacks = event;
+                for (var name in callbacks) {
+                    this.listenTo(obj,name,callbacks[name],one);
+                }
+                return this;
+            }
+
+            if (!callback) {
+                callback = "handleEvent";
+            }
+            
             // Bind callbacks on obj,
             if (isString(callback)) {
                 callback = this[callback];
@@ -2480,37 +3308,16 @@ define('skylark-langx/Evented',[
             return this.listenTo(obj, event, callback, 1);
         },
 
-        off: function(events, callback) {
-            var _hub = this._hub || (this._hub = {});
-            if (isString(events)) {
-                events = events.split(/\s/)
-            }
-
-            events.forEach(function(name) {
-                var evts = _hub[name];
-                var liveEvents = [];
-
-                if (evts && callback) {
-                    for (var i = 0, len = evts.length; i < len; i++) {
-                        if (evts[i].fn !== callback && evts[i].fn._ !== callback)
-                            liveEvents.push(evts[i]);
-                    }
-                }
-
-                if (liveEvents.length) {
-                    _hub[name] = liveEvents;
-                } else {
-                    delete _hub[name];
-                }
-            });
-
-            return this;
-        },
         unlistenTo: function(obj, event, callback) {
             var listeningTo = this._listeningTo;
             if (!listeningTo) {
                 return this;
             }
+
+            if (isString(callback)) {
+                callback = this[callback];
+            }
+
             for (var i = 0; i < listeningTo.length; i++) {
                 var listening = listeningTo[i];
 
@@ -2555,91 +3362,6190 @@ define('skylark-langx/Evented',[
         }
     });
 
-	return Evented;
+    return events.Listener = Listener;
 
+});
+define('skylark-langx-events/Emitter',[
+  "skylark-langx-types",
+  "skylark-langx-objects",
+  "skylark-langx-arrays",
+  "skylark-langx-klass",
+  "./events",
+  "./Event",
+  "./Listener"
+],function(types,objects,arrays,klass,events,Event,Listener){
+    var slice = Array.prototype.slice,
+        compact = arrays.compact,
+        isDefined = types.isDefined,
+        isPlainObject = types.isPlainObject,
+        isFunction = types.isFunction,
+        isString = types.isString,
+        isEmptyObject = types.isEmptyObject,
+        mixin = objects.mixin,
+        safeMixin = objects.safeMixin;
+
+    function parse(event) {
+        var segs = ("" + event).split(".");
+        return {
+            name: segs[0],
+            ns: segs.slice(1).join(" ")
+        };
+    }
+
+    var Emitter = Listener.inherit({
+        _prepareArgs : function(e,args) {
+            if (isDefined(args)) {
+                args = [e].concat(args);
+            } else {
+                args = [e];
+            }
+            return args;
+        },
+
+        on: function(events, selector, data, callback, ctx, /*used internally*/ one) {
+            var self = this,
+                _hub = this._hub || (this._hub = {});
+
+            if (isPlainObject(events)) {
+                ctx = callback;
+                each(events, function(type, fn) {
+                    self.on(type, selector, data, fn, ctx, one);
+                });
+                return this;
+            }
+
+            if (!isString(selector) && !isFunction(callback)) {
+                ctx = callback;
+                callback = data;
+                data = selector;
+                selector = undefined;
+            }
+
+            if (isFunction(data)) {
+                ctx = callback;
+                callback = data;
+                data = null;
+            }
+
+            if (!callback ) {
+                throw new Error("No callback function");
+            } else if (!isFunction(callback)) {
+                throw new Error("The callback  is not afunction");
+            }
+
+            if (isString(events)) {
+                events = events.split(/\s/)
+            }
+
+            events.forEach(function(event) {
+                var parsed = parse(event),
+                    name = parsed.name,
+                    ns = parsed.ns;
+
+                (_hub[name] || (_hub[name] = [])).push({
+                    fn: callback,
+                    selector: selector,
+                    data: data,
+                    ctx: ctx,
+                    ns : ns,
+                    one: one
+                });
+            });
+
+            return this;
+        },
+
+        one: function(events, selector, data, callback, ctx) {
+            return this.on(events, selector, data, callback, ctx, 1);
+        },
+
+        emit: function(e /*,argument list*/ ) {
+            if (!this._hub) {
+                return this;
+            }
+
+            var self = this;
+
+            if (isString(e)) {
+                e = new Event(e); //new CustomEvent(e);
+            }
+
+            Object.defineProperty(e,"target",{
+                value : this
+            });
+
+            var args = slice.call(arguments, 1);
+
+            args = this._prepareArgs(e,args);
+
+            [e.type || e.name, "all"].forEach(function(eventName) {
+                var parsed = parse(eventName),
+                    name = parsed.name,
+                    ns = parsed.ns;
+
+                var listeners = self._hub[name];
+                if (!listeners) {
+                    return;
+                }
+
+                var len = listeners.length,
+                    reCompact = false;
+
+                for (var i = 0; i < len; i++) {
+                    if (e.isImmediatePropagationStopped && e.isImmediatePropagationStopped()) {
+                        return this;
+                    }
+                    var listener = listeners[i];
+                    if (ns && (!listener.ns ||  !listener.ns.startsWith(ns))) {
+                        continue;
+                    }
+                    if (e.data) {
+                        if (listener.data) {
+                            e.data = mixin({}, listener.data, e.data);
+                        }
+                    } else {
+                        e.data = listener.data || null;
+                    }
+                    listener.fn.apply(listener.ctx, args);
+                    if (listener.one) {
+                        listeners[i] = null;
+                        reCompact = true;
+                    }
+                }
+
+                if (reCompact) {
+                    self._hub[eventName] = compact(listeners);
+                }
+
+            });
+            return this;
+        },
+
+        listened: function(event) {
+            var evtArr = ((this._hub || (this._events = {}))[event] || []);
+            return evtArr.length > 0;
+        },
+
+        off: function(events, callback) {
+            var _hub = this._hub || (this._hub = {});
+            if (isString(events)) {
+                events = events.split(/\s/)
+            }
+
+            events.forEach(function(event) {
+                var parsed = parse(event),
+                    name = parsed.name,
+                    ns = parsed.ns;
+
+                var evts = _hub[name];
+
+                if (evts) {
+                    var liveEvents = [];
+
+                    if (callback || ns) {
+                        for (var i = 0, len = evts.length; i < len; i++) {
+                            
+                            if (callback && evts[i].fn !== callback && evts[i].fn._ !== callback) {
+                                liveEvents.push(evts[i]);
+                                continue;
+                            } 
+
+                            if (ns && (!evts[i].ns || evts[i].ns.indexOf(ns)!=0)) {
+                                liveEvents.push(evts[i]);
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (liveEvents.length) {
+                        _hub[name] = liveEvents;
+                    } else {
+                        delete _hub[name];
+                    }
+
+                }
+            });
+
+            return this;
+        },
+        trigger  : function() {
+            return this.emit.apply(this,arguments);
+        }
+    });
+
+
+    return events.Emitter = Emitter;
+
+});
+define('skylark-langx-events/createEvent',[
+	"./events",
+	"./Event"
+],function(events,Event){
+    function createEvent(type,props) {
+        //var e = new CustomEvent(type,props);
+        //return safeMixin(e, props);
+        return new Event(type,props);
+    };
+
+    return events.createEvent = createEvent;	
+});
+define('skylark-langx-events/main',[
+	"./events",
+	"./Event",
+	"./Listener",
+	"./Emitter",
+	"./createEvent"
+],function(events){
+	return events;
+});
+define('skylark-langx-events', ['skylark-langx-events/main'], function (main) { return main; });
+
+define('skylark-langx/Emitter',[
+    "skylark-langx-events"
+],function(events){
+    return events.Emitter;
+});
+define('skylark-langx/Evented',[
+    "./Emitter"
+],function(Emitter){
+    return Emitter;
+});
+define('skylark-langx/events',[
+	"skylark-langx-events"
+],function(events){
+	return events;
+});
+define('skylark-langx/funcs',[
+    "skylark-langx-funcs"
+],function(funcs){
+    return funcs;
 });
 define('skylark-langx/hoster',[
-],function(){
-	// The javascript host environment, brower and nodejs are supported.
-	var hoster = {
-		"isBrowser" : true, // default
-		"isNode" : null,
-		"global" : this,
-		"browser" : null,
-		"node" : null
+	"skylark-langx-hoster"
+],function(hoster){
+	return hoster;
+});
+define('skylark-langx-maths/maths',[
+    "skylark-langx-ns",
+    "skylark-langx-types"
+],function(skylark,types){
+
+
+	var _lut = [];
+
+	for ( var i = 0; i < 256; i ++ ) {
+
+		_lut[ i ] = ( i < 16 ? '0' : '' ) + ( i ).toString( 16 );
+
+	}
+
+	var maths = {
+
+		DEG2RAD: Math.PI / 180,
+		RAD2DEG: 180 / Math.PI,
+
+
+
+		clamp: function ( value, min, max ) {
+
+			return Math.max( min, Math.min( max, value ) );
+
+		},
+
+		// compute euclidian modulo of m % n
+		// https://en.wikipedia.org/wiki/Modulo_operation
+
+		euclideanModulo: function ( n, m ) {
+
+			return ( ( n % m ) + m ) % m;
+
+		},
+
+		// Linear mapping from range <a1, a2> to range <b1, b2>
+
+		mapLinear: function ( x, a1, a2, b1, b2 ) {
+
+			return b1 + ( x - a1 ) * ( b2 - b1 ) / ( a2 - a1 );
+
+		},
+
+		// https://en.wikipedia.org/wiki/Linear_interpolation
+
+		lerp: function ( x, y, t ) {
+
+			return ( 1 - t ) * x + t * y;
+
+		},
+
+		// http://en.wikipedia.org/wiki/Smoothstep
+
+		smoothstep: function ( x, min, max ) {
+
+			if ( x <= min ) return 0;
+			if ( x >= max ) return 1;
+
+			x = ( x - min ) / ( max - min );
+
+			return x * x * ( 3 - 2 * x );
+
+		},
+
+		smootherstep: function ( x, min, max ) {
+
+			if ( x <= min ) return 0;
+			if ( x >= max ) return 1;
+
+			x = ( x - min ) / ( max - min );
+
+			return x * x * x * ( x * ( x * 6 - 15 ) + 10 );
+
+		},
+
+		// Random integer from <low, high> interval
+
+		randInt: function ( low, high ) {
+
+			return low + Math.floor( Math.random() * ( high - low + 1 ) );
+
+		},
+
+		// Random float from <low, high> interval
+
+		randFloat: function ( low, high ) {
+
+			return low + Math.random() * ( high - low );
+
+		},
+
+		// Random float from <-range/2, range/2> interval
+
+		randFloatSpread: function ( range ) {
+
+			return range * ( 0.5 - Math.random() );
+
+		},
+
+		degToRad: function ( degrees ) {
+
+			return degrees * maths.DEG2RAD;
+
+		},
+
+		radToDeg: function ( radians ) {
+
+			return radians * maths.RAD2DEG;
+
+		},
+
+		isPowerOfTwo: function ( value ) {
+
+			return ( value & ( value - 1 ) ) === 0 && value !== 0;
+
+		},
+
+		ceilPowerOfTwo: function ( value ) {
+
+			return Math.pow( 2, Math.ceil( Math.log( value ) / Math.LN2 ) );
+
+		},
+
+		floorPowerOfTwo: function ( value ) {
+
+			return Math.pow( 2, Math.floor( Math.log( value ) / Math.LN2 ) );
+
+		},
+
+		setQuaternionFromProperEuler: function ( q, a, b, c, order ) {
+
+			// Intrinsic Proper Euler Angles - see https://en.wikipedia.org/wiki/Euler_angles
+
+			// rotations are applied to the axes in the order specified by 'order'
+			// rotation by angle 'a' is applied first, then by angle 'b', then by angle 'c'
+			// angles are in radians
+
+			var cos = Math.cos;
+			var sin = Math.sin;
+
+			var c2 = cos( b / 2 );
+			var s2 = sin( b / 2 );
+
+			var c13 = cos( ( a + c ) / 2 );
+			var s13 = sin( ( a + c ) / 2 );
+
+			var c1_3 = cos( ( a - c ) / 2 );
+			var s1_3 = sin( ( a - c ) / 2 );
+
+			var c3_1 = cos( ( c - a ) / 2 );
+			var s3_1 = sin( ( c - a ) / 2 );
+
+			if ( order === 'XYX' ) {
+
+				q.set( c2 * s13, s2 * c1_3, s2 * s1_3, c2 * c13 );
+
+			} else if ( order === 'YZY' ) {
+
+				q.set( s2 * s1_3, c2 * s13, s2 * c1_3, c2 * c13 );
+
+			} else if ( order === 'ZXZ' ) {
+
+				q.set( s2 * c1_3, s2 * s1_3, c2 * s13, c2 * c13 );
+
+			} else if ( order === 'XZX' ) {
+
+				q.set( c2 * s13, s2 * s3_1, s2 * c3_1, c2 * c13 );
+
+			} else if ( order === 'YXY' ) {
+
+				q.set( s2 * c3_1, c2 * s13, s2 * s3_1, c2 * c13 );
+
+			} else if ( order === 'ZYZ' ) {
+
+				q.set( s2 * s3_1, s2 * c3_1, c2 * s13, c2 * c13 );
+
+			} else {
+
+				console.warn( 'THREE.MathUtils: .setQuaternionFromProperEuler() encountered an unknown order.' );
+
+			}
+
+		}
+
 	};
 
-	if (typeof process == "object" && process.versions && process.versions.node && process.versions.v8) {
-		hoster.isNode = true;
-		hoster.isBrowser = false;
+
+
+	return  skylark.attach("langx.maths",maths);
+});
+define('skylark-langx-maths/main',[
+	"./maths"
+],function(maths){
+	return maths;
+});
+define('skylark-langx-maths', ['skylark-langx-maths/main'], function (main) { return main; });
+
+define('skylark-langx/maths',[
+    "skylark-langx-maths"
+],function(maths){
+    return maths;
+});
+define('skylark-langx-numerics/numerics',[
+    "skylark-langx-ns",
+    "skylark-langx-types"
+],function(skylark,types){
+
+	return  skylark.attach("langx.numerics",{
+		toFinite : types.toFinite,
+		toNumber : types.toNumber,
+		toInteger : types.toInteger
+	});
+});
+define('skylark-langx-numerics/maths',[
+    "skylark-langx-ns",
+    "skylark-langx-types",
+    "./numerics"
+],function(skylark,types,numerics){
+
+
+	var _lut = [];
+
+	for ( var i = 0; i < 256; i ++ ) {
+
+		_lut[ i ] = ( i < 16 ? '0' : '' ) + ( i ).toString( 16 );
+
 	}
 
-	hoster.global = (function(){
-		if (typeof global !== 'undefined' && typeof global !== 'function') {
-			// global spec defines a reference to the global object called 'global'
-			// https://github.com/tc39/proposal-global
-			// `global` is also defined in NodeJS
-			return global;
-		} else if (typeof window !== 'undefined') {
-			// window is defined in browsers
-			return window;
-		}
-		else if (typeof self !== 'undefined') {
-			// self is defined in WebWorkers
-			return self;
-		}
-		return this;
-	})();
+	var maths = {
 
-	var _document = null;
+		DEG2RAD: Math.PI / 180,
+		RAD2DEG: 180 / Math.PI,
 
-	Object.defineProperty(hoster,"document",function(){
-		if (!_document) {
-			var w = typeof window === 'undefined' ? require('html-element') : window;
-			_document = w.document;
+
+
+		clamp: function ( value, min, max ) {
+
+			return Math.max( min, Math.min( max, value ) );
+
+		},
+
+		// compute euclidian modulo of m % n
+		// https://en.wikipedia.org/wiki/Modulo_operation
+
+		euclideanModulo: function ( n, m ) {
+
+			return ( ( n % m ) + m ) % m;
+
+		},
+
+		// Linear mapping from range <a1, a2> to range <b1, b2>
+
+		mapLinear: function ( x, a1, a2, b1, b2 ) {
+
+			return b1 + ( x - a1 ) * ( b2 - b1 ) / ( a2 - a1 );
+
+		},
+
+		// https://en.wikipedia.org/wiki/Linear_interpolation
+
+		lerp: function ( x, y, t ) {
+
+			return ( 1 - t ) * x + t * y;
+
+		},
+
+		// http://en.wikipedia.org/wiki/Smoothstep
+
+		smoothstep: function ( x, min, max ) {
+
+			if ( x <= min ) return 0;
+			if ( x >= max ) return 1;
+
+			x = ( x - min ) / ( max - min );
+
+			return x * x * ( 3 - 2 * x );
+
+		},
+
+		smootherstep: function ( x, min, max ) {
+
+			if ( x <= min ) return 0;
+			if ( x >= max ) return 1;
+
+			x = ( x - min ) / ( max - min );
+
+			return x * x * x * ( x * ( x * 6 - 15 ) + 10 );
+
+		},
+
+		// Random integer from <low, high> interval
+
+		randInt: function ( low, high ) {
+
+			return low + Math.floor( Math.random() * ( high - low + 1 ) );
+
+		},
+
+		// Random float from <low, high> interval
+
+		randFloat: function ( low, high ) {
+
+			return low + Math.random() * ( high - low );
+
+		},
+
+		// Random float from <-range/2, range/2> interval
+
+		randFloatSpread: function ( range ) {
+
+			return range * ( 0.5 - Math.random() );
+
+		},
+
+		degToRad: function ( degrees ) {
+
+			return degrees * maths.DEG2RAD;
+
+		},
+
+		radToDeg: function ( radians ) {
+
+			return radians * maths.RAD2DEG;
+
+		},
+
+		isPowerOfTwo: function ( value ) {
+
+			return ( value & ( value - 1 ) ) === 0 && value !== 0;
+
+		},
+
+		ceilPowerOfTwo: function ( value ) {
+
+			return Math.pow( 2, Math.ceil( Math.log( value ) / Math.LN2 ) );
+
+		},
+
+		floorPowerOfTwo: function ( value ) {
+
+			return Math.pow( 2, Math.floor( Math.log( value ) / Math.LN2 ) );
+
+		},
+
+		setQuaternionFromProperEuler: function ( q, a, b, c, order ) {
+
+			// Intrinsic Proper Euler Angles - see https://en.wikipedia.org/wiki/Euler_angles
+
+			// rotations are applied to the axes in the order specified by 'order'
+			// rotation by angle 'a' is applied first, then by angle 'b', then by angle 'c'
+			// angles are in radians
+
+			var cos = Math.cos;
+			var sin = Math.sin;
+
+			var c2 = cos( b / 2 );
+			var s2 = sin( b / 2 );
+
+			var c13 = cos( ( a + c ) / 2 );
+			var s13 = sin( ( a + c ) / 2 );
+
+			var c1_3 = cos( ( a - c ) / 2 );
+			var s1_3 = sin( ( a - c ) / 2 );
+
+			var c3_1 = cos( ( c - a ) / 2 );
+			var s3_1 = sin( ( c - a ) / 2 );
+
+			if ( order === 'XYX' ) {
+
+				q.set( c2 * s13, s2 * c1_3, s2 * s1_3, c2 * c13 );
+
+			} else if ( order === 'YZY' ) {
+
+				q.set( s2 * s1_3, c2 * s13, s2 * c1_3, c2 * c13 );
+
+			} else if ( order === 'ZXZ' ) {
+
+				q.set( s2 * c1_3, s2 * s1_3, c2 * s13, c2 * c13 );
+
+			} else if ( order === 'XZX' ) {
+
+				q.set( c2 * s13, s2 * s3_1, s2 * c3_1, c2 * c13 );
+
+			} else if ( order === 'YXY' ) {
+
+				q.set( s2 * c3_1, c2 * s13, s2 * s3_1, c2 * c13 );
+
+			} else if ( order === 'ZYZ' ) {
+
+				q.set( s2 * s3_1, s2 * c3_1, c2 * s13, c2 * c13 );
+
+			} else {
+
+				console.warn( 'THREE.MathUtils: .setQuaternionFromProperEuler() encountered an unknown order.' );
+
+			}
+
 		}
 
-		return _document;
+	};
+
+
+	return  numerics.maths = maths;
+});
+define('skylark-langx-numerics/Quaternion',[
+	"skylark-langx-klass",
+	"./numerics",
+	"./maths"
+] ,function(klass,numerics,maths) {
+
+	var Quaternion = klass({
+		"klassName" : "Quaternion",
+
+		x: {
+
+			get: function () {
+
+				return this._x;
+
+			},
+
+			set: function ( value ) {
+
+				this._x = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		y: {
+
+			get: function () {
+
+				return this._y;
+
+			},
+
+			set: function ( value ) {
+
+				this._y = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		z: {
+
+			get: function () {
+
+				return this._z;
+
+			},
+
+			set: function ( value ) {
+
+				this._z = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		w: {
+
+			get: function () {
+
+				return this._w;
+
+			},
+
+			set: function ( value ) {
+
+				this._w = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		set: function ( x, y, z, w ) {
+
+			this._x = x;
+			this._y = y;
+			this._z = z;
+			this._w = w;
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		clone: function () {
+
+			return new this.constructor( this._x, this._y, this._z, this._w );
+
+		},
+
+		copy: function ( quaternion ) {
+
+			this._x = quaternion.x;
+			this._y = quaternion.y;
+			this._z = quaternion.z;
+			this._w = quaternion.w;
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		setFromEuler: function ( euler, update ) {
+
+			if ( ! ( euler && euler.isEuler ) ) {
+
+				throw new Error( 'mathsQuaternion: .setFromEuler() now expects an Euler rotation rather than a Vector3 and order.' );
+
+			}
+
+			var x = euler._x, y = euler._y, z = euler._z, order = euler.order;
+
+			// http://www.mathworks.com/matlabcentral/fileexchange/
+			// 	20696-function-to-convert-between-dcm-euler-angles-quaternions-and-euler-vectors/
+			//	content/SpinCalc.m
+
+			var cos = Math.cos;
+			var sin = Math.sin;
+
+			var c1 = cos( x / 2 );
+			var c2 = cos( y / 2 );
+			var c3 = cos( z / 2 );
+
+			var s1 = sin( x / 2 );
+			var s2 = sin( y / 2 );
+			var s3 = sin( z / 2 );
+
+			if ( order === 'XYZ' ) {
+
+				this._x = s1 * c2 * c3 + c1 * s2 * s3;
+				this._y = c1 * s2 * c3 - s1 * c2 * s3;
+				this._z = c1 * c2 * s3 + s1 * s2 * c3;
+				this._w = c1 * c2 * c3 - s1 * s2 * s3;
+
+			} else if ( order === 'YXZ' ) {
+
+				this._x = s1 * c2 * c3 + c1 * s2 * s3;
+				this._y = c1 * s2 * c3 - s1 * c2 * s3;
+				this._z = c1 * c2 * s3 - s1 * s2 * c3;
+				this._w = c1 * c2 * c3 + s1 * s2 * s3;
+
+			} else if ( order === 'ZXY' ) {
+
+				this._x = s1 * c2 * c3 - c1 * s2 * s3;
+				this._y = c1 * s2 * c3 + s1 * c2 * s3;
+				this._z = c1 * c2 * s3 + s1 * s2 * c3;
+				this._w = c1 * c2 * c3 - s1 * s2 * s3;
+
+			} else if ( order === 'ZYX' ) {
+
+				this._x = s1 * c2 * c3 - c1 * s2 * s3;
+				this._y = c1 * s2 * c3 + s1 * c2 * s3;
+				this._z = c1 * c2 * s3 - s1 * s2 * c3;
+				this._w = c1 * c2 * c3 + s1 * s2 * s3;
+
+			} else if ( order === 'YZX' ) {
+
+				this._x = s1 * c2 * c3 + c1 * s2 * s3;
+				this._y = c1 * s2 * c3 + s1 * c2 * s3;
+				this._z = c1 * c2 * s3 - s1 * s2 * c3;
+				this._w = c1 * c2 * c3 - s1 * s2 * s3;
+
+			} else if ( order === 'XZY' ) {
+
+				this._x = s1 * c2 * c3 - c1 * s2 * s3;
+				this._y = c1 * s2 * c3 - s1 * c2 * s3;
+				this._z = c1 * c2 * s3 + s1 * s2 * c3;
+				this._w = c1 * c2 * c3 + s1 * s2 * s3;
+
+			}
+
+			if ( update !== false ) this._onChangeCallback();
+
+			return this;
+
+		},
+
+		setFromAxisAngle: function ( axis, angle ) {
+
+			// http://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
+
+			// assumes axis is normalized
+
+			var halfAngle = angle / 2, s = Math.sin( halfAngle );
+
+			this._x = axis.x * s;
+			this._y = axis.y * s;
+			this._z = axis.z * s;
+			this._w = Math.cos( halfAngle );
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		setFromRotationMatrix: function ( m ) {
+
+			// http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
+
+			// assumes the upper 3x3 of m is a pure rotation matrix (i.e, unscaled)
+
+			var te = m.elements,
+
+				m11 = te[ 0 ], m12 = te[ 4 ], m13 = te[ 8 ],
+				m21 = te[ 1 ], m22 = te[ 5 ], m23 = te[ 9 ],
+				m31 = te[ 2 ], m32 = te[ 6 ], m33 = te[ 10 ],
+
+				trace = m11 + m22 + m33,
+				s;
+
+			if ( trace > 0 ) {
+
+				s = 0.5 / Math.sqrt( trace + 1.0 );
+
+				this._w = 0.25 / s;
+				this._x = ( m32 - m23 ) * s;
+				this._y = ( m13 - m31 ) * s;
+				this._z = ( m21 - m12 ) * s;
+
+			} else if ( m11 > m22 && m11 > m33 ) {
+
+				s = 2.0 * Math.sqrt( 1.0 + m11 - m22 - m33 );
+
+				this._w = ( m32 - m23 ) / s;
+				this._x = 0.25 * s;
+				this._y = ( m12 + m21 ) / s;
+				this._z = ( m13 + m31 ) / s;
+
+			} else if ( m22 > m33 ) {
+
+				s = 2.0 * Math.sqrt( 1.0 + m22 - m11 - m33 );
+
+				this._w = ( m13 - m31 ) / s;
+				this._x = ( m12 + m21 ) / s;
+				this._y = 0.25 * s;
+				this._z = ( m23 + m32 ) / s;
+
+			} else {
+
+				s = 2.0 * Math.sqrt( 1.0 + m33 - m11 - m22 );
+
+				this._w = ( m21 - m12 ) / s;
+				this._x = ( m13 + m31 ) / s;
+				this._y = ( m23 + m32 ) / s;
+				this._z = 0.25 * s;
+
+			}
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		setFromUnitVectors: function ( vFrom, vTo ) {
+
+			// assumes direction vectors vFrom and vTo are normalized
+
+			var EPS = 0.000001;
+
+			var r = vFrom.dot( vTo ) + 1;
+
+			if ( r < EPS ) {
+
+				r = 0;
+
+				if ( Math.abs( vFrom.x ) > Math.abs( vFrom.z ) ) {
+
+					this._x = - vFrom.y;
+					this._y = vFrom.x;
+					this._z = 0;
+					this._w = r;
+
+				} else {
+
+					this._x = 0;
+					this._y = - vFrom.z;
+					this._z = vFrom.y;
+					this._w = r;
+
+				}
+
+			} else {
+
+				// crossVectors( vFrom, vTo ); // inlined to avoid cyclic dependency on Vector3
+
+				this._x = vFrom.y * vTo.z - vFrom.z * vTo.y;
+				this._y = vFrom.z * vTo.x - vFrom.x * vTo.z;
+				this._z = vFrom.x * vTo.y - vFrom.y * vTo.x;
+				this._w = r;
+
+			}
+
+			return this.normalize();
+
+		},
+
+		angleTo: function ( q ) {
+
+			return 2 * Math.acos( Math.abs( maths.clamp( this.dot( q ), - 1, 1 ) ) );
+
+		},
+
+		rotateTowards: function ( q, step ) {
+
+			var angle = this.angleTo( q );
+
+			if ( angle === 0 ) return this;
+
+			var t = Math.min( 1, step / angle );
+
+			this.slerp( q, t );
+
+			return this;
+
+		},
+
+		inverse: function () {
+
+			// quaternion is assumed to have unit length
+
+			return this.conjugate();
+
+		},
+
+		conjugate: function () {
+
+			this._x *= - 1;
+			this._y *= - 1;
+			this._z *= - 1;
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		dot: function ( v ) {
+
+			return this._x * v._x + this._y * v._y + this._z * v._z + this._w * v._w;
+
+		},
+
+		lengthSq: function () {
+
+			return this._x * this._x + this._y * this._y + this._z * this._z + this._w * this._w;
+
+		},
+
+		length: function () {
+
+			return Math.sqrt( this._x * this._x + this._y * this._y + this._z * this._z + this._w * this._w );
+
+		},
+
+		normalize: function () {
+
+			var l = this.length();
+
+			if ( l === 0 ) {
+
+				this._x = 0;
+				this._y = 0;
+				this._z = 0;
+				this._w = 1;
+
+			} else {
+
+				l = 1 / l;
+
+				this._x = this._x * l;
+				this._y = this._y * l;
+				this._z = this._z * l;
+				this._w = this._w * l;
+
+			}
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		multiply: function ( q, p ) {
+
+			if ( p !== undefined ) {
+
+				console.warn( 'mathsQuaternion: .multiply() now only accepts one argument. Use .multiplyQuaternions( a, b ) instead.' );
+				return this.multiplyQuaternions( q, p );
+
+			}
+
+			return this.multiplyQuaternions( this, q );
+
+		},
+
+		premultiply: function ( q ) {
+
+			return this.multiplyQuaternions( q, this );
+
+		},
+
+		multiplyQuaternions: function ( a, b ) {
+
+			// from http://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/code/index.htm
+
+			var qax = a._x, qay = a._y, qaz = a._z, qaw = a._w;
+			var qbx = b._x, qby = b._y, qbz = b._z, qbw = b._w;
+
+			this._x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+			this._y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+			this._z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+			this._w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		slerp: function ( qb, t ) {
+
+			if ( t === 0 ) return this;
+			if ( t === 1 ) return this.copy( qb );
+
+			var x = this._x, y = this._y, z = this._z, w = this._w;
+
+			// http://www.euclideanspace.com/maths/algebra/realNormedAlgebra/quaternions/slerp/
+
+			var cosHalfTheta = w * qb._w + x * qb._x + y * qb._y + z * qb._z;
+
+			if ( cosHalfTheta < 0 ) {
+
+				this._w = - qb._w;
+				this._x = - qb._x;
+				this._y = - qb._y;
+				this._z = - qb._z;
+
+				cosHalfTheta = - cosHalfTheta;
+
+			} else {
+
+				this.copy( qb );
+
+			}
+
+			if ( cosHalfTheta >= 1.0 ) {
+
+				this._w = w;
+				this._x = x;
+				this._y = y;
+				this._z = z;
+
+				return this;
+
+			}
+
+			var sqrSinHalfTheta = 1.0 - cosHalfTheta * cosHalfTheta;
+
+			if ( sqrSinHalfTheta <= Number.EPSILON ) {
+
+				var s = 1 - t;
+				this._w = s * w + t * this._w;
+				this._x = s * x + t * this._x;
+				this._y = s * y + t * this._y;
+				this._z = s * z + t * this._z;
+
+				this.normalize();
+				this._onChangeCallback();
+
+				return this;
+
+			}
+
+			var sinHalfTheta = Math.sqrt( sqrSinHalfTheta );
+			var halfTheta = Math.atan2( sinHalfTheta, cosHalfTheta );
+			var ratioA = Math.sin( ( 1 - t ) * halfTheta ) / sinHalfTheta,
+				ratioB = Math.sin( t * halfTheta ) / sinHalfTheta;
+
+			this._w = ( w * ratioA + this._w * ratioB );
+			this._x = ( x * ratioA + this._x * ratioB );
+			this._y = ( y * ratioA + this._y * ratioB );
+			this._z = ( z * ratioA + this._z * ratioB );
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		equals: function ( quaternion ) {
+
+			return ( quaternion._x === this._x ) && ( quaternion._y === this._y ) && ( quaternion._z === this._z ) && ( quaternion._w === this._w );
+
+		},
+
+		fromArray: function ( array, offset ) {
+
+			if ( offset === undefined ) offset = 0;
+
+			this._x = array[ offset ];
+			this._y = array[ offset + 1 ];
+			this._z = array[ offset + 2 ];
+			this._w = array[ offset + 3 ];
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			array[ offset ] = this._x;
+			array[ offset + 1 ] = this._y;
+			array[ offset + 2 ] = this._z;
+			array[ offset + 3 ] = this._w;
+
+			return array;
+
+		},
+
+		fromBufferAttribute: function ( attribute, index ) {
+
+			this._x = attribute.getX( index );
+			this._y = attribute.getY( index );
+			this._z = attribute.getZ( index );
+			this._w = attribute.getW( index );
+
+			return this;
+
+		},
+
+		_onChange: function ( callback ) {
+
+			this._onChangeCallback = callback;
+
+			return this;
+
+		},
+
+		_onChangeCallback: function () {},
+
+
+		"_construct" : function ( x, y, z, w ) {
+
+			this._x = x || 0;
+			this._y = y || 0;
+			this._z = z || 0;
+			this._w = ( w !== undefined ) ? w : 1;
+
+		}
+
+
+	})
+
+
+	Object.assign( Quaternion, {
+
+		slerp: function ( qa, qb, qm, t ) {
+
+			return qm.copy( qa ).slerp( qb, t );
+
+		},
+
+		slerpFlat: function ( dst, dstOffset, src0, srcOffset0, src1, srcOffset1, t ) {
+
+			// fuzz-free, array-based Quaternion SLERP operation
+
+			var x0 = src0[ srcOffset0 + 0 ],
+				y0 = src0[ srcOffset0 + 1 ],
+				z0 = src0[ srcOffset0 + 2 ],
+				w0 = src0[ srcOffset0 + 3 ],
+
+				x1 = src1[ srcOffset1 + 0 ],
+				y1 = src1[ srcOffset1 + 1 ],
+				z1 = src1[ srcOffset1 + 2 ],
+				w1 = src1[ srcOffset1 + 3 ];
+
+			if ( w0 !== w1 || x0 !== x1 || y0 !== y1 || z0 !== z1 ) {
+
+				var s = 1 - t,
+
+					cos = x0 * x1 + y0 * y1 + z0 * z1 + w0 * w1,
+
+					dir = ( cos >= 0 ? 1 : - 1 ),
+					sqrSin = 1 - cos * cos;
+
+				// Skip the Slerp for tiny steps to avoid numeric problems:
+				if ( sqrSin > Number.EPSILON ) {
+
+					var sin = Math.sqrt( sqrSin ),
+						len = Math.atan2( sin, cos * dir );
+
+					s = Math.sin( s * len ) / sin;
+					t = Math.sin( t * len ) / sin;
+
+				}
+
+				var tDir = t * dir;
+
+				x0 = x0 * s + x1 * tDir;
+				y0 = y0 * s + y1 * tDir;
+				z0 = z0 * s + z1 * tDir;
+				w0 = w0 * s + w1 * tDir;
+
+				// Normalize in case we just did a lerp:
+				if ( s === 1 - t ) {
+
+					var f = 1 / Math.sqrt( x0 * x0 + y0 * y0 + z0 * z0 + w0 * w0 );
+
+					x0 *= f;
+					y0 *= f;
+					z0 *= f;
+					w0 *= f;
+
+				}
+
+			}
+
+			dst[ dstOffset ] = x0;
+			dst[ dstOffset + 1 ] = y0;
+			dst[ dstOffset + 2 ] = z0;
+			dst[ dstOffset + 3 ] = w0;
+
+		}
+
+	} );
+
+	Object.assign( Quaternion.prototype, {
+
+
+	} );
+
+
+	return numerics.Quaternion = Quaternion;
+
+
+});
+define('skylark-langx-numerics/Vector3',[
+	"skylark-langx-klass",
+	"./numerics",
+	"./maths",
+	"./Quaternion"
+] ,function(
+	klass,
+	numerics,
+	maths,
+	Quaternion
+) {
+
+	var _quaternion = new Quaternion();
+
+	var Vector3 = klass({
+		"klassName" : "Vector3",
+
+		set: function ( x, y, z ) {
+
+			this.x = x;
+			this.y = y;
+			this.z = z;
+
+			return this;
+
+		},
+
+		setScalar: function ( scalar ) {
+
+			this.x = scalar;
+			this.y = scalar;
+			this.z = scalar;
+
+			return this;
+
+		},
+
+		setX: function ( x ) {
+
+			this.x = x;
+
+			return this;
+
+		},
+
+		setY: function ( y ) {
+
+			this.y = y;
+
+			return this;
+
+		},
+
+		setZ: function ( z ) {
+
+			this.z = z;
+
+			return this;
+
+		},
+
+		setComponent: function ( index, value ) {
+
+			switch ( index ) {
+
+				case 0: this.x = value; break;
+				case 1: this.y = value; break;
+				case 2: this.z = value; break;
+				default: throw new Error( 'index is out of range: ' + index );
+
+			}
+
+			return this;
+
+		},
+
+		getComponent: function ( index ) {
+
+			switch ( index ) {
+
+				case 0: return this.x;
+				case 1: return this.y;
+				case 2: return this.z;
+				default: throw new Error( 'index is out of range: ' + index );
+
+			}
+
+		},
+
+		clone: function () {
+
+			return new this.constructor( this.x, this.y, this.z );
+
+		},
+
+		copy: function ( v ) {
+
+			this.x = v.x;
+			this.y = v.y;
+			this.z = v.z;
+
+			return this;
+
+		},
+
+		add: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'mathsVector3: .add() now only accepts one argument. Use .addVectors( a, b ) instead.' );
+				return this.addVectors( v, w );
+
+			}
+
+			this.x += v.x;
+			this.y += v.y;
+			this.z += v.z;
+
+			return this;
+
+		},
+
+		addScalar: function ( s ) {
+
+			this.x += s;
+			this.y += s;
+			this.z += s;
+
+			return this;
+
+		},
+
+		addVectors: function ( a, b ) {
+
+			this.x = a.x + b.x;
+			this.y = a.y + b.y;
+			this.z = a.z + b.z;
+
+			return this;
+
+		},
+
+		addScaledVector: function ( v, s ) {
+
+			this.x += v.x * s;
+			this.y += v.y * s;
+			this.z += v.z * s;
+
+			return this;
+
+		},
+
+		sub: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'mathsVector3: .sub() now only accepts one argument. Use .subVectors( a, b ) instead.' );
+				return this.subVectors( v, w );
+
+			}
+
+			this.x -= v.x;
+			this.y -= v.y;
+			this.z -= v.z;
+
+			return this;
+
+		},
+
+		subScalar: function ( s ) {
+
+			this.x -= s;
+			this.y -= s;
+			this.z -= s;
+
+			return this;
+
+		},
+
+		subVectors: function ( a, b ) {
+
+			this.x = a.x - b.x;
+			this.y = a.y - b.y;
+			this.z = a.z - b.z;
+
+			return this;
+
+		},
+
+		multiply: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'mathsVector3: .multiply() now only accepts one argument. Use .multiplyVectors( a, b ) instead.' );
+				return this.multiplyVectors( v, w );
+
+			}
+
+			this.x *= v.x;
+			this.y *= v.y;
+			this.z *= v.z;
+
+			return this;
+
+		},
+
+		multiplyScalar: function ( scalar ) {
+
+			this.x *= scalar;
+			this.y *= scalar;
+			this.z *= scalar;
+
+			return this;
+
+		},
+
+		multiplyVectors: function ( a, b ) {
+
+			this.x = a.x * b.x;
+			this.y = a.y * b.y;
+			this.z = a.z * b.z;
+
+			return this;
+
+		},
+
+		applyEuler: function ( euler ) {
+
+			if ( ! ( euler && euler.isEuler ) ) {
+
+				console.error( 'mathsVector3: .applyEuler() now expects an Euler rotation rather than a Vector3 and order.' );
+
+			}
+
+			return this.applyQuaternion( _quaternion.setFromEuler( euler ) );
+
+		},
+
+		applyAxisAngle: function ( axis, angle ) {
+
+			return this.applyQuaternion( _quaternion.setFromAxisAngle( axis, angle ) );
+
+		},
+
+		applyMatrix3: function ( m ) {
+
+			var x = this.x, y = this.y, z = this.z;
+			var e = m.elements;
+
+			this.x = e[ 0 ] * x + e[ 3 ] * y + e[ 6 ] * z;
+			this.y = e[ 1 ] * x + e[ 4 ] * y + e[ 7 ] * z;
+			this.z = e[ 2 ] * x + e[ 5 ] * y + e[ 8 ] * z;
+
+			return this;
+
+		},
+
+		applyNormalMatrix: function ( m ) {
+
+			return this.applyMatrix3( m ).normalize();
+
+		},
+
+		applyMatrix4: function ( m ) {
+
+			var x = this.x, y = this.y, z = this.z;
+			var e = m.elements;
+
+			var w = 1 / ( e[ 3 ] * x + e[ 7 ] * y + e[ 11 ] * z + e[ 15 ] );
+
+			this.x = ( e[ 0 ] * x + e[ 4 ] * y + e[ 8 ] * z + e[ 12 ] ) * w;
+			this.y = ( e[ 1 ] * x + e[ 5 ] * y + e[ 9 ] * z + e[ 13 ] ) * w;
+			this.z = ( e[ 2 ] * x + e[ 6 ] * y + e[ 10 ] * z + e[ 14 ] ) * w;
+
+			return this;
+
+		},
+
+		applyQuaternion: function ( q ) {
+
+			var x = this.x, y = this.y, z = this.z;
+			var qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+
+			// calculate quat * vector
+
+			var ix = qw * x + qy * z - qz * y;
+			var iy = qw * y + qz * x - qx * z;
+			var iz = qw * z + qx * y - qy * x;
+			var iw = - qx * x - qy * y - qz * z;
+
+			// calculate result * inverse quat
+
+			this.x = ix * qw + iw * - qx + iy * - qz - iz * - qy;
+			this.y = iy * qw + iw * - qy + iz * - qx - ix * - qz;
+			this.z = iz * qw + iw * - qz + ix * - qy - iy * - qx;
+
+			return this;
+
+		},
+
+		project: function ( camera ) {
+
+			return this.applyMatrix4( camera.matrixWorldInverse ).applyMatrix4( camera.projectionMatrix );
+
+		},
+
+		unproject: function ( camera ) {
+
+			return this.applyMatrix4( camera.projectionMatrixInverse ).applyMatrix4( camera.matrixWorld );
+
+		},
+
+		transformDirection: function ( m ) {
+
+			// input: mathsMatrix4 affine matrix
+			// vector interpreted as a direction
+
+			var x = this.x, y = this.y, z = this.z;
+			var e = m.elements;
+
+			this.x = e[ 0 ] * x + e[ 4 ] * y + e[ 8 ] * z;
+			this.y = e[ 1 ] * x + e[ 5 ] * y + e[ 9 ] * z;
+			this.z = e[ 2 ] * x + e[ 6 ] * y + e[ 10 ] * z;
+
+			return this.normalize();
+
+		},
+
+		divide: function ( v ) {
+
+			this.x /= v.x;
+			this.y /= v.y;
+			this.z /= v.z;
+
+			return this;
+
+		},
+
+		divideScalar: function ( scalar ) {
+
+			return this.multiplyScalar( 1 / scalar );
+
+		},
+
+		min: function ( v ) {
+
+			this.x = Math.min( this.x, v.x );
+			this.y = Math.min( this.y, v.y );
+			this.z = Math.min( this.z, v.z );
+
+			return this;
+
+		},
+
+		max: function ( v ) {
+
+			this.x = Math.max( this.x, v.x );
+			this.y = Math.max( this.y, v.y );
+			this.z = Math.max( this.z, v.z );
+
+			return this;
+
+		},
+
+		clamp: function ( min, max ) {
+
+			// assumes min < max, componentwise
+
+			this.x = Math.max( min.x, Math.min( max.x, this.x ) );
+			this.y = Math.max( min.y, Math.min( max.y, this.y ) );
+			this.z = Math.max( min.z, Math.min( max.z, this.z ) );
+
+			return this;
+
+		},
+
+		clampScalar: function ( minVal, maxVal ) {
+
+			this.x = Math.max( minVal, Math.min( maxVal, this.x ) );
+			this.y = Math.max( minVal, Math.min( maxVal, this.y ) );
+			this.z = Math.max( minVal, Math.min( maxVal, this.z ) );
+
+			return this;
+
+		},
+
+		clampLength: function ( min, max ) {
+
+			var length = this.length();
+
+			return this.divideScalar( length || 1 ).multiplyScalar( Math.max( min, Math.min( max, length ) ) );
+
+		},
+
+		floor: function () {
+
+			this.x = Math.floor( this.x );
+			this.y = Math.floor( this.y );
+			this.z = Math.floor( this.z );
+
+			return this;
+
+		},
+
+		ceil: function () {
+
+			this.x = Math.ceil( this.x );
+			this.y = Math.ceil( this.y );
+			this.z = Math.ceil( this.z );
+
+			return this;
+
+		},
+
+		round: function () {
+
+			this.x = Math.round( this.x );
+			this.y = Math.round( this.y );
+			this.z = Math.round( this.z );
+
+			return this;
+
+		},
+
+		roundToZero: function () {
+
+			this.x = ( this.x < 0 ) ? Math.ceil( this.x ) : Math.floor( this.x );
+			this.y = ( this.y < 0 ) ? Math.ceil( this.y ) : Math.floor( this.y );
+			this.z = ( this.z < 0 ) ? Math.ceil( this.z ) : Math.floor( this.z );
+
+			return this;
+
+		},
+
+		negate: function () {
+
+			this.x = - this.x;
+			this.y = - this.y;
+			this.z = - this.z;
+
+			return this;
+
+		},
+
+		dot: function ( v ) {
+
+			return this.x * v.x + this.y * v.y + this.z * v.z;
+
+		},
+
+		// TODO lengthSquared?
+
+		lengthSq: function () {
+
+			return this.x * this.x + this.y * this.y + this.z * this.z;
+
+		},
+
+		length: function () {
+
+			return Math.sqrt( this.x * this.x + this.y * this.y + this.z * this.z );
+
+		},
+
+		manhattanLength: function () {
+
+			return Math.abs( this.x ) + Math.abs( this.y ) + Math.abs( this.z );
+
+		},
+
+		normalize: function () {
+
+			return this.divideScalar( this.length() || 1 );
+
+		},
+
+		setLength: function ( length ) {
+
+			return this.normalize().multiplyScalar( length );
+
+		},
+
+		lerp: function ( v, alpha ) {
+
+			this.x += ( v.x - this.x ) * alpha;
+			this.y += ( v.y - this.y ) * alpha;
+			this.z += ( v.z - this.z ) * alpha;
+
+			return this;
+
+		},
+
+		lerpVectors: function ( v1, v2, alpha ) {
+
+			return this.subVectors( v2, v1 ).multiplyScalar( alpha ).add( v1 );
+
+		},
+
+		cross: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'mathsVector3: .cross() now only accepts one argument. Use .crossVectors( a, b ) instead.' );
+				return this.crossVectors( v, w );
+
+			}
+
+			return this.crossVectors( this, v );
+
+		},
+
+		crossVectors: function ( a, b ) {
+
+			var ax = a.x, ay = a.y, az = a.z;
+			var bx = b.x, by = b.y, bz = b.z;
+
+			this.x = ay * bz - az * by;
+			this.y = az * bx - ax * bz;
+			this.z = ax * by - ay * bx;
+
+			return this;
+
+		},
+
+		projectOnVector: function ( v ) {
+
+			var denominator = v.lengthSq();
+
+			if ( denominator === 0 ) return this.set( 0, 0, 0 );
+
+			var scalar = v.dot( this ) / denominator;
+
+			return this.copy( v ).multiplyScalar( scalar );
+
+		},
+
+		projectOnPlane: function ( planeNormal ) {
+
+			_vector.copy( this ).projectOnVector( planeNormal );
+
+			return this.sub( _vector );
+
+		},
+
+		reflect: function ( normal ) {
+
+			// reflect incident vector off plane orthogonal to normal
+			// normal is assumed to have unit length
+
+			return this.sub( _vector.copy( normal ).multiplyScalar( 2 * this.dot( normal ) ) );
+
+		},
+
+		angleTo: function ( v ) {
+
+			var denominator = Math.sqrt( this.lengthSq() * v.lengthSq() );
+
+			if ( denominator === 0 ) return Math.PI / 2;
+
+			var theta = this.dot( v ) / denominator;
+
+			// clamp, to handle numerical problems
+
+			return Math.acos( MathUtils.clamp( theta, - 1, 1 ) );
+
+		},
+
+		distanceTo: function ( v ) {
+
+			return Math.sqrt( this.distanceToSquared( v ) );
+
+		},
+
+		distanceToSquared: function ( v ) {
+
+			var dx = this.x - v.x, dy = this.y - v.y, dz = this.z - v.z;
+
+			return dx * dx + dy * dy + dz * dz;
+
+		},
+
+		manhattanDistanceTo: function ( v ) {
+
+			return Math.abs( this.x - v.x ) + Math.abs( this.y - v.y ) + Math.abs( this.z - v.z );
+
+		},
+
+		setFromSpherical: function ( s ) {
+
+			return this.setFromSphericalCoords( s.radius, s.phi, s.theta );
+
+		},
+
+		setFromSphericalCoords: function ( radius, phi, theta ) {
+
+			var sinPhiRadius = Math.sin( phi ) * radius;
+
+			this.x = sinPhiRadius * Math.sin( theta );
+			this.y = Math.cos( phi ) * radius;
+			this.z = sinPhiRadius * Math.cos( theta );
+
+			return this;
+
+		},
+
+		setFromCylindrical: function ( c ) {
+
+			return this.setFromCylindricalCoords( c.radius, c.theta, c.y );
+
+		},
+
+		setFromCylindricalCoords: function ( radius, theta, y ) {
+
+			this.x = radius * Math.sin( theta );
+			this.y = y;
+			this.z = radius * Math.cos( theta );
+
+			return this;
+
+		},
+
+		setFromMatrixPosition: function ( m ) {
+
+			var e = m.elements;
+
+			this.x = e[ 12 ];
+			this.y = e[ 13 ];
+			this.z = e[ 14 ];
+
+			return this;
+
+		},
+
+		setFromMatrixScale: function ( m ) {
+
+			var sx = this.setFromMatrixColumn( m, 0 ).length();
+			var sy = this.setFromMatrixColumn( m, 1 ).length();
+			var sz = this.setFromMatrixColumn( m, 2 ).length();
+
+			this.x = sx;
+			this.y = sy;
+			this.z = sz;
+
+			return this;
+
+		},
+
+		setFromMatrixColumn: function ( m, index ) {
+
+			return this.fromArray( m.elements, index * 4 );
+
+		},
+
+		setFromMatrix3Column: function ( m, index ) {
+
+			return this.fromArray( m.elements, index * 3 );
+
+		},
+
+		equals: function ( v ) {
+
+			return ( ( v.x === this.x ) && ( v.y === this.y ) && ( v.z === this.z ) );
+
+		},
+
+		fromArray: function ( array, offset ) {
+
+			if ( offset === undefined ) offset = 0;
+
+			this.x = array[ offset ];
+			this.y = array[ offset + 1 ];
+			this.z = array[ offset + 2 ];
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			array[ offset ] = this.x;
+			array[ offset + 1 ] = this.y;
+			array[ offset + 2 ] = this.z;
+
+			return array;
+
+		},
+
+		fromBufferAttribute: function ( attribute, index, offset ) {
+
+			if ( offset !== undefined ) {
+
+				console.warn( 'mathsVector3: offset has been removed from .fromBufferAttribute().' );
+
+			}
+
+			this.x = attribute.getX( index );
+			this.y = attribute.getY( index );
+			this.z = attribute.getZ( index );
+
+			return this;
+
+		},
+
+
+		"_construct" : function ( x, y, z ) {
+
+			this.x = x || 0;
+			this.y = y || 0;
+			this.z = z || 0;
+
+		}
+
 	});
 
-	if (hoster.isBrowser) {
-	    function uaMatch( ua ) {
-		    ua = ua.toLowerCase();
+	var _vector = new Vector3();
 
-		    var match = /(chrome)[ \/]([\w.]+)/.exec( ua ) ||
-		      /(webkit)[ \/]([\w.]+)/.exec( ua ) ||
-		      /(opera)(?:.*version|)[ \/]([\w.]+)/.exec( ua ) ||
-		      /(msie) ([\w.]+)/.exec( ua ) ||
-		      ua.indexOf('compatible') < 0 && /(mozilla)(?:.*? rv:([\w.]+)|)/.exec( ua ) ||
-		      [];
 
-		    return {
-		      browser: match[ 1 ] || '',
-		      version: match[ 2 ] || '0'
-		    };
-	  	};
-
-	    var matched = uaMatch( navigator.userAgent );
-
-	    var browser = hoster.browser = {};
-
-	    if ( matched.browser ) {
-	      browser[ matched.browser ] = true;
-	      browser.version = matched.version;
-	    }
-
-	    // Chrome is Webkit, but Webkit is also Safari.
-	    if ( browser.chrome ) {
-	      browser.webkit = true;
-	    } else if ( browser.webkit ) {
-	      browser.safari = true;
-	    }
-	}
-
-	return  hoster;
+	return numerics.Vector3 = Vector3;
 });
-define('skylark-langx/strings',[
-],function(){
+define('skylark-langx-numerics/Matrix4',[
+	"skylark-langx-klass",
+	"./numerics",
+	"./Vector3"
+] ,function(
+	klass,
+	numerics,
+	Vector3
+) {
+
+	var _v1 = new Vector3();
+	var _zero = new Vector3( 0, 0, 0 );
+	var _one = new Vector3( 1, 1, 1 );
+	var _x = new Vector3();
+	var _y = new Vector3();
+	var _z = new Vector3();
+
+	var Matrix4 = klass({
+		set: function ( n11, n12, n13, n14, n21, n22, n23, n24, n31, n32, n33, n34, n41, n42, n43, n44 ) {
+
+			var te = this.elements;
+
+			te[ 0 ] = n11; te[ 4 ] = n12; te[ 8 ] = n13; te[ 12 ] = n14;
+			te[ 1 ] = n21; te[ 5 ] = n22; te[ 9 ] = n23; te[ 13 ] = n24;
+			te[ 2 ] = n31; te[ 6 ] = n32; te[ 10 ] = n33; te[ 14 ] = n34;
+			te[ 3 ] = n41; te[ 7 ] = n42; te[ 11 ] = n43; te[ 15 ] = n44;
+
+			return this;
+
+		},
+
+		identity: function () {
+
+			this.set(
+
+				1, 0, 0, 0,
+				0, 1, 0, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		clone: function () {
+
+			return new Matrix4().fromArray( this.elements );
+
+		},
+
+		copy: function ( m ) {
+
+			var te = this.elements;
+			var me = m.elements;
+
+			te[ 0 ] = me[ 0 ]; te[ 1 ] = me[ 1 ]; te[ 2 ] = me[ 2 ]; te[ 3 ] = me[ 3 ];
+			te[ 4 ] = me[ 4 ]; te[ 5 ] = me[ 5 ]; te[ 6 ] = me[ 6 ]; te[ 7 ] = me[ 7 ];
+			te[ 8 ] = me[ 8 ]; te[ 9 ] = me[ 9 ]; te[ 10 ] = me[ 10 ]; te[ 11 ] = me[ 11 ];
+			te[ 12 ] = me[ 12 ]; te[ 13 ] = me[ 13 ]; te[ 14 ] = me[ 14 ]; te[ 15 ] = me[ 15 ];
+
+			return this;
+
+		},
+
+		copyPosition: function ( m ) {
+
+			var te = this.elements, me = m.elements;
+
+			te[ 12 ] = me[ 12 ];
+			te[ 13 ] = me[ 13 ];
+			te[ 14 ] = me[ 14 ];
+
+			return this;
+
+		},
+
+		extractBasis: function ( xAxis, yAxis, zAxis ) {
+
+			xAxis.setFromMatrixColumn( this, 0 );
+			yAxis.setFromMatrixColumn( this, 1 );
+			zAxis.setFromMatrixColumn( this, 2 );
+
+			return this;
+
+		},
+
+		makeBasis: function ( xAxis, yAxis, zAxis ) {
+
+			this.set(
+				xAxis.x, yAxis.x, zAxis.x, 0,
+				xAxis.y, yAxis.y, zAxis.y, 0,
+				xAxis.z, yAxis.z, zAxis.z, 0,
+				0, 0, 0, 1
+			);
+
+			return this;
+
+		},
+
+		extractRotation: function ( m ) {
+
+			// this method does not support reflection matrices
+
+			var te = this.elements;
+			var me = m.elements;
+
+			var scaleX = 1 / _v1.setFromMatrixColumn( m, 0 ).length();
+			var scaleY = 1 / _v1.setFromMatrixColumn( m, 1 ).length();
+			var scaleZ = 1 / _v1.setFromMatrixColumn( m, 2 ).length();
+
+			te[ 0 ] = me[ 0 ] * scaleX;
+			te[ 1 ] = me[ 1 ] * scaleX;
+			te[ 2 ] = me[ 2 ] * scaleX;
+			te[ 3 ] = 0;
+
+			te[ 4 ] = me[ 4 ] * scaleY;
+			te[ 5 ] = me[ 5 ] * scaleY;
+			te[ 6 ] = me[ 6 ] * scaleY;
+			te[ 7 ] = 0;
+
+			te[ 8 ] = me[ 8 ] * scaleZ;
+			te[ 9 ] = me[ 9 ] * scaleZ;
+			te[ 10 ] = me[ 10 ] * scaleZ;
+			te[ 11 ] = 0;
+
+			te[ 12 ] = 0;
+			te[ 13 ] = 0;
+			te[ 14 ] = 0;
+			te[ 15 ] = 1;
+
+			return this;
+
+		},
+
+		makeRotationFromEuler: function ( euler ) {
+
+			if ( ! ( euler && euler.isEuler ) ) {
+
+				console.error( 'mathsMatrix4: .makeRotationFromEuler() now expects a Euler rotation rather than a Vector3 and order.' );
+
+			}
+
+			var te = this.elements;
+
+			var x = euler.x, y = euler.y, z = euler.z;
+			var a = Math.cos( x ), b = Math.sin( x );
+			var c = Math.cos( y ), d = Math.sin( y );
+			var e = Math.cos( z ), f = Math.sin( z );
+
+			if ( euler.order === 'XYZ' ) {
+
+				var ae = a * e, af = a * f, be = b * e, bf = b * f;
+
+				te[ 0 ] = c * e;
+				te[ 4 ] = - c * f;
+				te[ 8 ] = d;
+
+				te[ 1 ] = af + be * d;
+				te[ 5 ] = ae - bf * d;
+				te[ 9 ] = - b * c;
+
+				te[ 2 ] = bf - ae * d;
+				te[ 6 ] = be + af * d;
+				te[ 10 ] = a * c;
+
+			} else if ( euler.order === 'YXZ' ) {
+
+				var ce = c * e, cf = c * f, de = d * e, df = d * f;
+
+				te[ 0 ] = ce + df * b;
+				te[ 4 ] = de * b - cf;
+				te[ 8 ] = a * d;
+
+				te[ 1 ] = a * f;
+				te[ 5 ] = a * e;
+				te[ 9 ] = - b;
+
+				te[ 2 ] = cf * b - de;
+				te[ 6 ] = df + ce * b;
+				te[ 10 ] = a * c;
+
+			} else if ( euler.order === 'ZXY' ) {
+
+				var ce = c * e, cf = c * f, de = d * e, df = d * f;
+
+				te[ 0 ] = ce - df * b;
+				te[ 4 ] = - a * f;
+				te[ 8 ] = de + cf * b;
+
+				te[ 1 ] = cf + de * b;
+				te[ 5 ] = a * e;
+				te[ 9 ] = df - ce * b;
+
+				te[ 2 ] = - a * d;
+				te[ 6 ] = b;
+				te[ 10 ] = a * c;
+
+			} else if ( euler.order === 'ZYX' ) {
+
+				var ae = a * e, af = a * f, be = b * e, bf = b * f;
+
+				te[ 0 ] = c * e;
+				te[ 4 ] = be * d - af;
+				te[ 8 ] = ae * d + bf;
+
+				te[ 1 ] = c * f;
+				te[ 5 ] = bf * d + ae;
+				te[ 9 ] = af * d - be;
+
+				te[ 2 ] = - d;
+				te[ 6 ] = b * c;
+				te[ 10 ] = a * c;
+
+			} else if ( euler.order === 'YZX' ) {
+
+				var ac = a * c, ad = a * d, bc = b * c, bd = b * d;
+
+				te[ 0 ] = c * e;
+				te[ 4 ] = bd - ac * f;
+				te[ 8 ] = bc * f + ad;
+
+				te[ 1 ] = f;
+				te[ 5 ] = a * e;
+				te[ 9 ] = - b * e;
+
+				te[ 2 ] = - d * e;
+				te[ 6 ] = ad * f + bc;
+				te[ 10 ] = ac - bd * f;
+
+			} else if ( euler.order === 'XZY' ) {
+
+				var ac = a * c, ad = a * d, bc = b * c, bd = b * d;
+
+				te[ 0 ] = c * e;
+				te[ 4 ] = - f;
+				te[ 8 ] = d * e;
+
+				te[ 1 ] = ac * f + bd;
+				te[ 5 ] = a * e;
+				te[ 9 ] = ad * f - bc;
+
+				te[ 2 ] = bc * f - ad;
+				te[ 6 ] = b * e;
+				te[ 10 ] = bd * f + ac;
+
+			}
+
+			// bottom row
+			te[ 3 ] = 0;
+			te[ 7 ] = 0;
+			te[ 11 ] = 0;
+
+			// last column
+			te[ 12 ] = 0;
+			te[ 13 ] = 0;
+			te[ 14 ] = 0;
+			te[ 15 ] = 1;
+
+			return this;
+
+		},
+
+		makeRotationFromQuaternion: function ( q ) {
+
+			return this.compose( _zero, q, _one );
+
+		},
+
+		lookAt: function ( eye, target, up ) {
+
+			var te = this.elements;
+
+			_z.subVectors( eye, target );
+
+			if ( _z.lengthSq() === 0 ) {
+
+				// eye and target are in the same position
+
+				_z.z = 1;
+
+			}
+
+			_z.normalize();
+			_x.crossVectors( up, _z );
+
+			if ( _x.lengthSq() === 0 ) {
+
+				// up and z are parallel
+
+				if ( Math.abs( up.z ) === 1 ) {
+
+					_z.x += 0.0001;
+
+				} else {
+
+					_z.z += 0.0001;
+
+				}
+
+				_z.normalize();
+				_x.crossVectors( up, _z );
+
+			}
+
+			_x.normalize();
+			_y.crossVectors( _z, _x );
+
+			te[ 0 ] = _x.x; te[ 4 ] = _y.x; te[ 8 ] = _z.x;
+			te[ 1 ] = _x.y; te[ 5 ] = _y.y; te[ 9 ] = _z.y;
+			te[ 2 ] = _x.z; te[ 6 ] = _y.z; te[ 10 ] = _z.z;
+
+			return this;
+
+		},
+
+		multiply: function ( m, n ) {
+
+			if ( n !== undefined ) {
+
+				console.warn( 'mathsMatrix4: .multiply() now only accepts one argument. Use .multiplyMatrices( a, b ) instead.' );
+				return this.multiplyMatrices( m, n );
+
+			}
+
+			return this.multiplyMatrices( this, m );
+
+		},
+
+		premultiply: function ( m ) {
+
+			return this.multiplyMatrices( m, this );
+
+		},
+
+		multiplyMatrices: function ( a, b ) {
+
+			var ae = a.elements;
+			var be = b.elements;
+			var te = this.elements;
+
+			var a11 = ae[ 0 ], a12 = ae[ 4 ], a13 = ae[ 8 ], a14 = ae[ 12 ];
+			var a21 = ae[ 1 ], a22 = ae[ 5 ], a23 = ae[ 9 ], a24 = ae[ 13 ];
+			var a31 = ae[ 2 ], a32 = ae[ 6 ], a33 = ae[ 10 ], a34 = ae[ 14 ];
+			var a41 = ae[ 3 ], a42 = ae[ 7 ], a43 = ae[ 11 ], a44 = ae[ 15 ];
+
+			var b11 = be[ 0 ], b12 = be[ 4 ], b13 = be[ 8 ], b14 = be[ 12 ];
+			var b21 = be[ 1 ], b22 = be[ 5 ], b23 = be[ 9 ], b24 = be[ 13 ];
+			var b31 = be[ 2 ], b32 = be[ 6 ], b33 = be[ 10 ], b34 = be[ 14 ];
+			var b41 = be[ 3 ], b42 = be[ 7 ], b43 = be[ 11 ], b44 = be[ 15 ];
+
+			te[ 0 ] = a11 * b11 + a12 * b21 + a13 * b31 + a14 * b41;
+			te[ 4 ] = a11 * b12 + a12 * b22 + a13 * b32 + a14 * b42;
+			te[ 8 ] = a11 * b13 + a12 * b23 + a13 * b33 + a14 * b43;
+			te[ 12 ] = a11 * b14 + a12 * b24 + a13 * b34 + a14 * b44;
+
+			te[ 1 ] = a21 * b11 + a22 * b21 + a23 * b31 + a24 * b41;
+			te[ 5 ] = a21 * b12 + a22 * b22 + a23 * b32 + a24 * b42;
+			te[ 9 ] = a21 * b13 + a22 * b23 + a23 * b33 + a24 * b43;
+			te[ 13 ] = a21 * b14 + a22 * b24 + a23 * b34 + a24 * b44;
+
+			te[ 2 ] = a31 * b11 + a32 * b21 + a33 * b31 + a34 * b41;
+			te[ 6 ] = a31 * b12 + a32 * b22 + a33 * b32 + a34 * b42;
+			te[ 10 ] = a31 * b13 + a32 * b23 + a33 * b33 + a34 * b43;
+			te[ 14 ] = a31 * b14 + a32 * b24 + a33 * b34 + a34 * b44;
+
+			te[ 3 ] = a41 * b11 + a42 * b21 + a43 * b31 + a44 * b41;
+			te[ 7 ] = a41 * b12 + a42 * b22 + a43 * b32 + a44 * b42;
+			te[ 11 ] = a41 * b13 + a42 * b23 + a43 * b33 + a44 * b43;
+			te[ 15 ] = a41 * b14 + a42 * b24 + a43 * b34 + a44 * b44;
+
+			return this;
+
+		},
+
+		multiplyScalar: function ( s ) {
+
+			var te = this.elements;
+
+			te[ 0 ] *= s; te[ 4 ] *= s; te[ 8 ] *= s; te[ 12 ] *= s;
+			te[ 1 ] *= s; te[ 5 ] *= s; te[ 9 ] *= s; te[ 13 ] *= s;
+			te[ 2 ] *= s; te[ 6 ] *= s; te[ 10 ] *= s; te[ 14 ] *= s;
+			te[ 3 ] *= s; te[ 7 ] *= s; te[ 11 ] *= s; te[ 15 ] *= s;
+
+			return this;
+
+		},
+
+		determinant: function () {
+
+			var te = this.elements;
+
+			var n11 = te[ 0 ], n12 = te[ 4 ], n13 = te[ 8 ], n14 = te[ 12 ];
+			var n21 = te[ 1 ], n22 = te[ 5 ], n23 = te[ 9 ], n24 = te[ 13 ];
+			var n31 = te[ 2 ], n32 = te[ 6 ], n33 = te[ 10 ], n34 = te[ 14 ];
+			var n41 = te[ 3 ], n42 = te[ 7 ], n43 = te[ 11 ], n44 = te[ 15 ];
+
+			//TODO: make this more efficient
+			//( based on http://www.euclideanspace.com/maths/algebra/matrix/functions/inverse/fourD/index.htm )
+
+			return (
+				n41 * (
+					+ n14 * n23 * n32
+					 - n13 * n24 * n32
+					 - n14 * n22 * n33
+					 + n12 * n24 * n33
+					 + n13 * n22 * n34
+					 - n12 * n23 * n34
+				) +
+				n42 * (
+					+ n11 * n23 * n34
+					 - n11 * n24 * n33
+					 + n14 * n21 * n33
+					 - n13 * n21 * n34
+					 + n13 * n24 * n31
+					 - n14 * n23 * n31
+				) +
+				n43 * (
+					+ n11 * n24 * n32
+					 - n11 * n22 * n34
+					 - n14 * n21 * n32
+					 + n12 * n21 * n34
+					 + n14 * n22 * n31
+					 - n12 * n24 * n31
+				) +
+				n44 * (
+					- n13 * n22 * n31
+					 - n11 * n23 * n32
+					 + n11 * n22 * n33
+					 + n13 * n21 * n32
+					 - n12 * n21 * n33
+					 + n12 * n23 * n31
+				)
+
+			);
+
+		},
+
+		transpose: function () {
+
+			var te = this.elements;
+			var tmp;
+
+			tmp = te[ 1 ]; te[ 1 ] = te[ 4 ]; te[ 4 ] = tmp;
+			tmp = te[ 2 ]; te[ 2 ] = te[ 8 ]; te[ 8 ] = tmp;
+			tmp = te[ 6 ]; te[ 6 ] = te[ 9 ]; te[ 9 ] = tmp;
+
+			tmp = te[ 3 ]; te[ 3 ] = te[ 12 ]; te[ 12 ] = tmp;
+			tmp = te[ 7 ]; te[ 7 ] = te[ 13 ]; te[ 13 ] = tmp;
+			tmp = te[ 11 ]; te[ 11 ] = te[ 14 ]; te[ 14 ] = tmp;
+
+			return this;
+
+		},
+
+		setPosition: function ( x, y, z ) {
+
+			var te = this.elements;
+
+			if ( x.isVector3 ) {
+
+				te[ 12 ] = x.x;
+				te[ 13 ] = x.y;
+				te[ 14 ] = x.z;
+
+			} else {
+
+				te[ 12 ] = x;
+				te[ 13 ] = y;
+				te[ 14 ] = z;
+
+			}
+
+			return this;
+
+		},
+
+		getInverse: function ( m, throwOnDegenerate ) {
+
+			if ( throwOnDegenerate !== undefined ) {
+
+				console.warn( "mathsMatrix4: .getInverse() can no longer be configured to throw on degenerate." );
+
+			}
+
+			// based on http://www.euclideanspace.com/maths/algebra/matrix/functions/inverse/fourD/index.htm
+			var te = this.elements,
+				me = m.elements,
+
+				n11 = me[ 0 ], n21 = me[ 1 ], n31 = me[ 2 ], n41 = me[ 3 ],
+				n12 = me[ 4 ], n22 = me[ 5 ], n32 = me[ 6 ], n42 = me[ 7 ],
+				n13 = me[ 8 ], n23 = me[ 9 ], n33 = me[ 10 ], n43 = me[ 11 ],
+				n14 = me[ 12 ], n24 = me[ 13 ], n34 = me[ 14 ], n44 = me[ 15 ],
+
+				t11 = n23 * n34 * n42 - n24 * n33 * n42 + n24 * n32 * n43 - n22 * n34 * n43 - n23 * n32 * n44 + n22 * n33 * n44,
+				t12 = n14 * n33 * n42 - n13 * n34 * n42 - n14 * n32 * n43 + n12 * n34 * n43 + n13 * n32 * n44 - n12 * n33 * n44,
+				t13 = n13 * n24 * n42 - n14 * n23 * n42 + n14 * n22 * n43 - n12 * n24 * n43 - n13 * n22 * n44 + n12 * n23 * n44,
+				t14 = n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34;
+
+			var det = n11 * t11 + n21 * t12 + n31 * t13 + n41 * t14;
+
+			if ( det === 0 ) return this.set( 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 );
+
+			var detInv = 1 / det;
+
+			te[ 0 ] = t11 * detInv;
+			te[ 1 ] = ( n24 * n33 * n41 - n23 * n34 * n41 - n24 * n31 * n43 + n21 * n34 * n43 + n23 * n31 * n44 - n21 * n33 * n44 ) * detInv;
+			te[ 2 ] = ( n22 * n34 * n41 - n24 * n32 * n41 + n24 * n31 * n42 - n21 * n34 * n42 - n22 * n31 * n44 + n21 * n32 * n44 ) * detInv;
+			te[ 3 ] = ( n23 * n32 * n41 - n22 * n33 * n41 - n23 * n31 * n42 + n21 * n33 * n42 + n22 * n31 * n43 - n21 * n32 * n43 ) * detInv;
+
+			te[ 4 ] = t12 * detInv;
+			te[ 5 ] = ( n13 * n34 * n41 - n14 * n33 * n41 + n14 * n31 * n43 - n11 * n34 * n43 - n13 * n31 * n44 + n11 * n33 * n44 ) * detInv;
+			te[ 6 ] = ( n14 * n32 * n41 - n12 * n34 * n41 - n14 * n31 * n42 + n11 * n34 * n42 + n12 * n31 * n44 - n11 * n32 * n44 ) * detInv;
+			te[ 7 ] = ( n12 * n33 * n41 - n13 * n32 * n41 + n13 * n31 * n42 - n11 * n33 * n42 - n12 * n31 * n43 + n11 * n32 * n43 ) * detInv;
+
+			te[ 8 ] = t13 * detInv;
+			te[ 9 ] = ( n14 * n23 * n41 - n13 * n24 * n41 - n14 * n21 * n43 + n11 * n24 * n43 + n13 * n21 * n44 - n11 * n23 * n44 ) * detInv;
+			te[ 10 ] = ( n12 * n24 * n41 - n14 * n22 * n41 + n14 * n21 * n42 - n11 * n24 * n42 - n12 * n21 * n44 + n11 * n22 * n44 ) * detInv;
+			te[ 11 ] = ( n13 * n22 * n41 - n12 * n23 * n41 - n13 * n21 * n42 + n11 * n23 * n42 + n12 * n21 * n43 - n11 * n22 * n43 ) * detInv;
+
+			te[ 12 ] = t14 * detInv;
+			te[ 13 ] = ( n13 * n24 * n31 - n14 * n23 * n31 + n14 * n21 * n33 - n11 * n24 * n33 - n13 * n21 * n34 + n11 * n23 * n34 ) * detInv;
+			te[ 14 ] = ( n14 * n22 * n31 - n12 * n24 * n31 - n14 * n21 * n32 + n11 * n24 * n32 + n12 * n21 * n34 - n11 * n22 * n34 ) * detInv;
+			te[ 15 ] = ( n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33 ) * detInv;
+
+			return this;
+
+		},
+
+		scale: function ( v ) {
+
+			var te = this.elements;
+			var x = v.x, y = v.y, z = v.z;
+
+			te[ 0 ] *= x; te[ 4 ] *= y; te[ 8 ] *= z;
+			te[ 1 ] *= x; te[ 5 ] *= y; te[ 9 ] *= z;
+			te[ 2 ] *= x; te[ 6 ] *= y; te[ 10 ] *= z;
+			te[ 3 ] *= x; te[ 7 ] *= y; te[ 11 ] *= z;
+
+			return this;
+
+		},
+
+		getMaxScaleOnAxis: function () {
+
+			var te = this.elements;
+
+			var scaleXSq = te[ 0 ] * te[ 0 ] + te[ 1 ] * te[ 1 ] + te[ 2 ] * te[ 2 ];
+			var scaleYSq = te[ 4 ] * te[ 4 ] + te[ 5 ] * te[ 5 ] + te[ 6 ] * te[ 6 ];
+			var scaleZSq = te[ 8 ] * te[ 8 ] + te[ 9 ] * te[ 9 ] + te[ 10 ] * te[ 10 ];
+
+			return Math.sqrt( Math.max( scaleXSq, scaleYSq, scaleZSq ) );
+
+		},
+
+		makeTranslation: function ( x, y, z ) {
+
+			this.set(
+
+				1, 0, 0, x,
+				0, 1, 0, y,
+				0, 0, 1, z,
+				0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		makeRotationX: function ( theta ) {
+
+			var c = Math.cos( theta ), s = Math.sin( theta );
+
+			this.set(
+
+				1, 0, 0, 0,
+				0, c, - s, 0,
+				0, s, c, 0,
+				0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		makeRotationY: function ( theta ) {
+
+			var c = Math.cos( theta ), s = Math.sin( theta );
+
+			this.set(
+
+				 c, 0, s, 0,
+				 0, 1, 0, 0,
+				- s, 0, c, 0,
+				 0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		makeRotationZ: function ( theta ) {
+
+			var c = Math.cos( theta ), s = Math.sin( theta );
+
+			this.set(
+
+				c, - s, 0, 0,
+				s, c, 0, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		makeRotationAxis: function ( axis, angle ) {
+
+			// Based on http://www.gamedev.net/reference/articles/article1199.asp
+
+			var c = Math.cos( angle );
+			var s = Math.sin( angle );
+			var t = 1 - c;
+			var x = axis.x, y = axis.y, z = axis.z;
+			var tx = t * x, ty = t * y;
+
+			this.set(
+
+				tx * x + c, tx * y - s * z, tx * z + s * y, 0,
+				tx * y + s * z, ty * y + c, ty * z - s * x, 0,
+				tx * z - s * y, ty * z + s * x, t * z * z + c, 0,
+				0, 0, 0, 1
+
+			);
+
+			 return this;
+
+		},
+
+		makeScale: function ( x, y, z ) {
+
+			this.set(
+
+				x, 0, 0, 0,
+				0, y, 0, 0,
+				0, 0, z, 0,
+				0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		makeShear: function ( x, y, z ) {
+
+			this.set(
+
+				1, y, z, 0,
+				x, 1, z, 0,
+				x, y, 1, 0,
+				0, 0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		compose: function ( position, quaternion, scale ) {
+
+			var te = this.elements;
+
+			var x = quaternion._x, y = quaternion._y, z = quaternion._z, w = quaternion._w;
+			var x2 = x + x,	y2 = y + y, z2 = z + z;
+			var xx = x * x2, xy = x * y2, xz = x * z2;
+			var yy = y * y2, yz = y * z2, zz = z * z2;
+			var wx = w * x2, wy = w * y2, wz = w * z2;
+
+			var sx = scale.x, sy = scale.y, sz = scale.z;
+
+			te[ 0 ] = ( 1 - ( yy + zz ) ) * sx;
+			te[ 1 ] = ( xy + wz ) * sx;
+			te[ 2 ] = ( xz - wy ) * sx;
+			te[ 3 ] = 0;
+
+			te[ 4 ] = ( xy - wz ) * sy;
+			te[ 5 ] = ( 1 - ( xx + zz ) ) * sy;
+			te[ 6 ] = ( yz + wx ) * sy;
+			te[ 7 ] = 0;
+
+			te[ 8 ] = ( xz + wy ) * sz;
+			te[ 9 ] = ( yz - wx ) * sz;
+			te[ 10 ] = ( 1 - ( xx + yy ) ) * sz;
+			te[ 11 ] = 0;
+
+			te[ 12 ] = position.x;
+			te[ 13 ] = position.y;
+			te[ 14 ] = position.z;
+			te[ 15 ] = 1;
+
+			return this;
+
+		},
+
+		decompose: function ( position, quaternion, scale ) {
+
+			var te = this.elements;
+
+			var sx = _v1.set( te[ 0 ], te[ 1 ], te[ 2 ] ).length();
+			var sy = _v1.set( te[ 4 ], te[ 5 ], te[ 6 ] ).length();
+			var sz = _v1.set( te[ 8 ], te[ 9 ], te[ 10 ] ).length();
+
+			// if determine is negative, we need to invert one scale
+			var det = this.determinant();
+			if ( det < 0 ) sx = - sx;
+
+			position.x = te[ 12 ];
+			position.y = te[ 13 ];
+			position.z = te[ 14 ];
+
+			// scale the rotation part
+			_m1.copy( this );
+
+			var invSX = 1 / sx;
+			var invSY = 1 / sy;
+			var invSZ = 1 / sz;
+
+			_m1.elements[ 0 ] *= invSX;
+			_m1.elements[ 1 ] *= invSX;
+			_m1.elements[ 2 ] *= invSX;
+
+			_m1.elements[ 4 ] *= invSY;
+			_m1.elements[ 5 ] *= invSY;
+			_m1.elements[ 6 ] *= invSY;
+
+			_m1.elements[ 8 ] *= invSZ;
+			_m1.elements[ 9 ] *= invSZ;
+			_m1.elements[ 10 ] *= invSZ;
+
+			quaternion.setFromRotationMatrix( _m1 );
+
+			scale.x = sx;
+			scale.y = sy;
+			scale.z = sz;
+
+			return this;
+
+		},
+
+		makePerspective: function ( left, right, top, bottom, near, far ) {
+
+			if ( far === undefined ) {
+
+				console.warn( 'mathsMatrix4: .makePerspective() has been redefined and has a new signature. Please check the docs.' );
+
+			}
+
+			var te = this.elements;
+			var x = 2 * near / ( right - left );
+			var y = 2 * near / ( top - bottom );
+
+			var a = ( right + left ) / ( right - left );
+			var b = ( top + bottom ) / ( top - bottom );
+			var c = - ( far + near ) / ( far - near );
+			var d = - 2 * far * near / ( far - near );
+
+			te[ 0 ] = x;	te[ 4 ] = 0;	te[ 8 ] = a;	te[ 12 ] = 0;
+			te[ 1 ] = 0;	te[ 5 ] = y;	te[ 9 ] = b;	te[ 13 ] = 0;
+			te[ 2 ] = 0;	te[ 6 ] = 0;	te[ 10 ] = c;	te[ 14 ] = d;
+			te[ 3 ] = 0;	te[ 7 ] = 0;	te[ 11 ] = - 1;	te[ 15 ] = 0;
+
+			return this;
+
+		},
+
+		makeOrthographic: function ( left, right, top, bottom, near, far ) {
+
+			var te = this.elements;
+			var w = 1.0 / ( right - left );
+			var h = 1.0 / ( top - bottom );
+			var p = 1.0 / ( far - near );
+
+			var x = ( right + left ) * w;
+			var y = ( top + bottom ) * h;
+			var z = ( far + near ) * p;
+
+			te[ 0 ] = 2 * w;	te[ 4 ] = 0;	te[ 8 ] = 0;	te[ 12 ] = - x;
+			te[ 1 ] = 0;	te[ 5 ] = 2 * h;	te[ 9 ] = 0;	te[ 13 ] = - y;
+			te[ 2 ] = 0;	te[ 6 ] = 0;	te[ 10 ] = - 2 * p;	te[ 14 ] = - z;
+			te[ 3 ] = 0;	te[ 7 ] = 0;	te[ 11 ] = 0;	te[ 15 ] = 1;
+
+			return this;
+
+		},
+
+		equals: function ( matrix ) {
+
+			var te = this.elements;
+			var me = matrix.elements;
+
+			for ( var i = 0; i < 16; i ++ ) {
+
+				if ( te[ i ] !== me[ i ] ) return false;
+
+			}
+
+			return true;
+
+		},
+
+		fromArray: function ( array, offset ) {
+
+			if ( offset === undefined ) offset = 0;
+
+			for ( var i = 0; i < 16; i ++ ) {
+
+				this.elements[ i ] = array[ i + offset ];
+
+			}
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			var te = this.elements;
+
+			array[ offset ] = te[ 0 ];
+			array[ offset + 1 ] = te[ 1 ];
+			array[ offset + 2 ] = te[ 2 ];
+			array[ offset + 3 ] = te[ 3 ];
+
+			array[ offset + 4 ] = te[ 4 ];
+			array[ offset + 5 ] = te[ 5 ];
+			array[ offset + 6 ] = te[ 6 ];
+			array[ offset + 7 ] = te[ 7 ];
+
+			array[ offset + 8 ] = te[ 8 ];
+			array[ offset + 9 ] = te[ 9 ];
+			array[ offset + 10 ] = te[ 10 ];
+			array[ offset + 11 ] = te[ 11 ];
+
+			array[ offset + 12 ] = te[ 12 ];
+			array[ offset + 13 ] = te[ 13 ];
+			array[ offset + 14 ] = te[ 14 ];
+			array[ offset + 15 ] = te[ 15 ];
+
+			return array;
+
+		},
+
+		"_construct" : function() {
+
+			this.elements = [
+
+				1, 0, 0, 0,
+				0, 1, 0, 0,
+				0, 0, 1, 0,
+				0, 0, 0, 1
+
+			];
+
+			if ( arguments.length > 0 ) {
+
+				console.error( 'mathsMatrix4: the constructor no longer reads arguments. use .set() instead.' );
+
+			}
+
+		}
+
+	});
+
+	var _m1 = new Matrix4();
+
+	return numerics.Matrix4 =  Matrix4 ;
+
+});
+define('skylark-langx-numerics/Euler',[
+	"skylark-langx-klass",
+	"./numerics",
+	"./maths",
+	"./Quaternion",
+	"./Vector3",
+	"./Matrix4"
+] ,function(
+	klass,
+	numerics,
+	maths,
+	Quaternion,
+	Vector3,
+	Matrix4
+) {
+
+	var _matrix = new Matrix4();
+	var _quaternion = new Quaternion();
+
+	var Euler = klass({
+		x: {
+
+			get: function () {
+
+				return this._x;
+
+			},
+
+			set: function ( value ) {
+
+				this._x = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		y: {
+
+			get: function () {
+
+				return this._y;
+
+			},
+
+			set: function ( value ) {
+
+				this._y = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		z: {
+
+			get: function () {
+
+				return this._z;
+
+			},
+
+			set: function ( value ) {
+
+				this._z = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		order: {
+
+			get: function () {
+
+				return this._order;
+
+			},
+
+			set: function ( value ) {
+
+				this._order = value;
+				this._onChangeCallback();
+
+			}
+
+		},
+
+		isEuler: true,
+
+		set: function ( x, y, z, order ) {
+
+			this._x = x;
+			this._y = y;
+			this._z = z;
+			this._order = order || this._order;
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		clone: function () {
+
+			return new this.constructor( this._x, this._y, this._z, this._order );
+
+		},
+
+		copy: function ( euler ) {
+
+			this._x = euler._x;
+			this._y = euler._y;
+			this._z = euler._z;
+			this._order = euler._order;
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		setFromRotationMatrix: function ( m, order, update ) {
+
+			var clamp = maths.clamp;
+
+			// assumes the upper 3x3 of m is a pure rotation matrix (i.e, unscaled)
+
+			var te = m.elements;
+			var m11 = te[ 0 ], m12 = te[ 4 ], m13 = te[ 8 ];
+			var m21 = te[ 1 ], m22 = te[ 5 ], m23 = te[ 9 ];
+			var m31 = te[ 2 ], m32 = te[ 6 ], m33 = te[ 10 ];
+
+			order = order || this._order;
+
+			if ( order === 'XYZ' ) {
+
+				this._y = Math.asin( clamp( m13, - 1, 1 ) );
+
+				if ( Math.abs( m13 ) < 0.9999999 ) {
+
+					this._x = Math.atan2( - m23, m33 );
+					this._z = Math.atan2( - m12, m11 );
+
+				} else {
+
+					this._x = Math.atan2( m32, m22 );
+					this._z = 0;
+
+				}
+
+			} else if ( order === 'YXZ' ) {
+
+				this._x = Math.asin( - clamp( m23, - 1, 1 ) );
+
+				if ( Math.abs( m23 ) < 0.9999999 ) {
+
+					this._y = Math.atan2( m13, m33 );
+					this._z = Math.atan2( m21, m22 );
+
+				} else {
+
+					this._y = Math.atan2( - m31, m11 );
+					this._z = 0;
+
+				}
+
+			} else if ( order === 'ZXY' ) {
+
+				this._x = Math.asin( clamp( m32, - 1, 1 ) );
+
+				if ( Math.abs( m32 ) < 0.9999999 ) {
+
+					this._y = Math.atan2( - m31, m33 );
+					this._z = Math.atan2( - m12, m22 );
+
+				} else {
+
+					this._y = 0;
+					this._z = Math.atan2( m21, m11 );
+
+				}
+
+			} else if ( order === 'ZYX' ) {
+
+				this._y = Math.asin( - clamp( m31, - 1, 1 ) );
+
+				if ( Math.abs( m31 ) < 0.9999999 ) {
+
+					this._x = Math.atan2( m32, m33 );
+					this._z = Math.atan2( m21, m11 );
+
+				} else {
+
+					this._x = 0;
+					this._z = Math.atan2( - m12, m22 );
+
+				}
+
+			} else if ( order === 'YZX' ) {
+
+				this._z = Math.asin( clamp( m21, - 1, 1 ) );
+
+				if ( Math.abs( m21 ) < 0.9999999 ) {
+
+					this._x = Math.atan2( - m23, m22 );
+					this._y = Math.atan2( - m31, m11 );
+
+				} else {
+
+					this._x = 0;
+					this._y = Math.atan2( m13, m33 );
+
+				}
+
+			} else if ( order === 'XZY' ) {
+
+				this._z = Math.asin( - clamp( m12, - 1, 1 ) );
+
+				if ( Math.abs( m12 ) < 0.9999999 ) {
+
+					this._x = Math.atan2( m32, m22 );
+					this._y = Math.atan2( m13, m11 );
+
+				} else {
+
+					this._x = Math.atan2( - m23, m33 );
+					this._y = 0;
+
+				}
+
+			} else {
+
+				console.warn( 'skylark-nunustudio/editor/gui/element/RendererCanvasEuler: .setFromRotationMatrix() given unsupported order: ' + order );
+
+			}
+
+			this._order = order;
+
+			if ( update !== false ) this._onChangeCallback();
+
+			return this;
+
+		},
+
+		setFromQuaternion: function ( q, order, update ) {
+
+			_matrix.makeRotationFromQuaternion( q );
+
+			return this.setFromRotationMatrix( _matrix, order, update );
+
+		},
+
+		setFromVector3: function ( v, order ) {
+
+			return this.set( v.x, v.y, v.z, order || this._order );
+
+		},
+
+		reorder: function ( newOrder ) {
+
+			// WARNING: this discards revolution information -bhouston
+
+			_quaternion.setFromEuler( this );
+
+			return this.setFromQuaternion( _quaternion, newOrder );
+
+		},
+
+		equals: function ( euler ) {
+
+			return ( euler._x === this._x ) && ( euler._y === this._y ) && ( euler._z === this._z ) && ( euler._order === this._order );
+
+		},
+
+		fromArray: function ( array ) {
+
+			this._x = array[ 0 ];
+			this._y = array[ 1 ];
+			this._z = array[ 2 ];
+			if ( array[ 3 ] !== undefined ) this._order = array[ 3 ];
+
+			this._onChangeCallback();
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			array[ offset ] = this._x;
+			array[ offset + 1 ] = this._y;
+			array[ offset + 2 ] = this._z;
+			array[ offset + 3 ] = this._order;
+
+			return array;
+
+		},
+
+		toVector3: function ( optionalResult ) {
+
+			if ( optionalResult ) {
+
+				return optionalResult.set( this._x, this._y, this._z );
+
+			} else {
+
+				return new Vector3( this._x, this._y, this._z );
+
+			}
+
+		},
+
+		_onChange: function ( callback ) {
+
+			this._onChangeCallback = callback;
+
+			return this;
+
+		},
+
+		_onChangeCallback: function () {},
+
+
+		"_construct" : function ( x, y, z, order ) {
+
+			this._x = x || 0;
+			this._y = y || 0;
+			this._z = z || 0;
+			this._order = order || Euler.DefaultOrder;
+
+		}
+
+
+	});
+
+
+	Euler.RotationOrders = [ 'XYZ', 'YZX', 'ZXY', 'XZY', 'YXZ', 'ZYX' ];
+
+	Euler.DefaultOrder = 'XYZ';
+
+
+	return numerics.Euler = Euler ;
+});
+
+define('skylark-langx-numerics/Matrix3',[
+	"skylark-langx-klass",
+	"./numerics"
+] ,function(klass,numerics) {
+
+	var Matrix3 = klass({
+		"klassName" : "Matrix3",
+
+		isMatrix3: true,
+
+		set: function ( n11, n12, n13, n21, n22, n23, n31, n32, n33 ) {
+
+			var te = this.elements;
+
+			te[ 0 ] = n11; te[ 1 ] = n21; te[ 2 ] = n31;
+			te[ 3 ] = n12; te[ 4 ] = n22; te[ 5 ] = n32;
+			te[ 6 ] = n13; te[ 7 ] = n23; te[ 8 ] = n33;
+
+			return this;
+
+		},
+
+		identity: function () {
+
+			this.set(
+
+				1, 0, 0,
+				0, 1, 0,
+				0, 0, 1
+
+			);
+
+			return this;
+
+		},
+
+		clone: function () {
+
+			return new this.constructor().fromArray( this.elements );
+
+		},
+
+		copy: function ( m ) {
+
+			var te = this.elements;
+			var me = m.elements;
+
+			te[ 0 ] = me[ 0 ]; te[ 1 ] = me[ 1 ]; te[ 2 ] = me[ 2 ];
+			te[ 3 ] = me[ 3 ]; te[ 4 ] = me[ 4 ]; te[ 5 ] = me[ 5 ];
+			te[ 6 ] = me[ 6 ]; te[ 7 ] = me[ 7 ]; te[ 8 ] = me[ 8 ];
+
+			return this;
+
+		},
+
+		extractBasis: function ( xAxis, yAxis, zAxis ) {
+
+			xAxis.setFromMatrix3Column( this, 0 );
+			yAxis.setFromMatrix3Column( this, 1 );
+			zAxis.setFromMatrix3Column( this, 2 );
+
+			return this;
+
+		},
+
+		setFromMatrix4: function ( m ) {
+
+			var me = m.elements;
+
+			this.set(
+
+				me[ 0 ], me[ 4 ], me[ 8 ],
+				me[ 1 ], me[ 5 ], me[ 9 ],
+				me[ 2 ], me[ 6 ], me[ 10 ]
+
+			);
+
+			return this;
+
+		},
+
+		multiply: function ( m ) {
+
+			return this.multiplyMatrices( this, m );
+
+		},
+
+		premultiply: function ( m ) {
+
+			return this.multiplyMatrices( m, this );
+
+		},
+
+		multiplyMatrices: function ( a, b ) {
+
+			var ae = a.elements;
+			var be = b.elements;
+			var te = this.elements;
+
+			var a11 = ae[ 0 ], a12 = ae[ 3 ], a13 = ae[ 6 ];
+			var a21 = ae[ 1 ], a22 = ae[ 4 ], a23 = ae[ 7 ];
+			var a31 = ae[ 2 ], a32 = ae[ 5 ], a33 = ae[ 8 ];
+
+			var b11 = be[ 0 ], b12 = be[ 3 ], b13 = be[ 6 ];
+			var b21 = be[ 1 ], b22 = be[ 4 ], b23 = be[ 7 ];
+			var b31 = be[ 2 ], b32 = be[ 5 ], b33 = be[ 8 ];
+
+			te[ 0 ] = a11 * b11 + a12 * b21 + a13 * b31;
+			te[ 3 ] = a11 * b12 + a12 * b22 + a13 * b32;
+			te[ 6 ] = a11 * b13 + a12 * b23 + a13 * b33;
+
+			te[ 1 ] = a21 * b11 + a22 * b21 + a23 * b31;
+			te[ 4 ] = a21 * b12 + a22 * b22 + a23 * b32;
+			te[ 7 ] = a21 * b13 + a22 * b23 + a23 * b33;
+
+			te[ 2 ] = a31 * b11 + a32 * b21 + a33 * b31;
+			te[ 5 ] = a31 * b12 + a32 * b22 + a33 * b32;
+			te[ 8 ] = a31 * b13 + a32 * b23 + a33 * b33;
+
+			return this;
+
+		},
+
+		multiplyScalar: function ( s ) {
+
+			var te = this.elements;
+
+			te[ 0 ] *= s; te[ 3 ] *= s; te[ 6 ] *= s;
+			te[ 1 ] *= s; te[ 4 ] *= s; te[ 7 ] *= s;
+			te[ 2 ] *= s; te[ 5 ] *= s; te[ 8 ] *= s;
+
+			return this;
+
+		},
+
+		determinant: function () {
+
+			var te = this.elements;
+
+			var a = te[ 0 ], b = te[ 1 ], c = te[ 2 ],
+				d = te[ 3 ], e = te[ 4 ], f = te[ 5 ],
+				g = te[ 6 ], h = te[ 7 ], i = te[ 8 ];
+
+			return a * e * i - a * f * h - b * d * i + b * f * g + c * d * h - c * e * g;
+
+		},
+
+		getInverse: function ( matrix, throwOnDegenerate ) {
+
+			if ( throwOnDegenerate !== undefined ) {
+
+				console.warn( "mathsMatrix3: .getInverse() can no longer be configured to throw on degenerate." );
+
+			}
+
+			var me = matrix.elements,
+				te = this.elements,
+
+				n11 = me[ 0 ], n21 = me[ 1 ], n31 = me[ 2 ],
+				n12 = me[ 3 ], n22 = me[ 4 ], n32 = me[ 5 ],
+				n13 = me[ 6 ], n23 = me[ 7 ], n33 = me[ 8 ],
+
+				t11 = n33 * n22 - n32 * n23,
+				t12 = n32 * n13 - n33 * n12,
+				t13 = n23 * n12 - n22 * n13,
+
+				det = n11 * t11 + n21 * t12 + n31 * t13;
+
+			if ( det === 0 ) return this.set( 0, 0, 0, 0, 0, 0, 0, 0, 0 );
+
+			var detInv = 1 / det;
+
+			te[ 0 ] = t11 * detInv;
+			te[ 1 ] = ( n31 * n23 - n33 * n21 ) * detInv;
+			te[ 2 ] = ( n32 * n21 - n31 * n22 ) * detInv;
+
+			te[ 3 ] = t12 * detInv;
+			te[ 4 ] = ( n33 * n11 - n31 * n13 ) * detInv;
+			te[ 5 ] = ( n31 * n12 - n32 * n11 ) * detInv;
+
+			te[ 6 ] = t13 * detInv;
+			te[ 7 ] = ( n21 * n13 - n23 * n11 ) * detInv;
+			te[ 8 ] = ( n22 * n11 - n21 * n12 ) * detInv;
+
+			return this;
+
+		},
+
+		transpose: function () {
+
+			var tmp, m = this.elements;
+
+			tmp = m[ 1 ]; m[ 1 ] = m[ 3 ]; m[ 3 ] = tmp;
+			tmp = m[ 2 ]; m[ 2 ] = m[ 6 ]; m[ 6 ] = tmp;
+			tmp = m[ 5 ]; m[ 5 ] = m[ 7 ]; m[ 7 ] = tmp;
+
+			return this;
+
+		},
+
+		getNormalMatrix: function ( matrix4 ) {
+
+			return this.setFromMatrix4( matrix4 ).getInverse( this ).transpose();
+
+		},
+
+		transposeIntoArray: function ( r ) {
+
+			var m = this.elements;
+
+			r[ 0 ] = m[ 0 ];
+			r[ 1 ] = m[ 3 ];
+			r[ 2 ] = m[ 6 ];
+			r[ 3 ] = m[ 1 ];
+			r[ 4 ] = m[ 4 ];
+			r[ 5 ] = m[ 7 ];
+			r[ 6 ] = m[ 2 ];
+			r[ 7 ] = m[ 5 ];
+			r[ 8 ] = m[ 8 ];
+
+			return this;
+
+		},
+
+		setUvTransform: function ( tx, ty, sx, sy, rotation, cx, cy ) {
+
+			var c = Math.cos( rotation );
+			var s = Math.sin( rotation );
+
+			this.set(
+				sx * c, sx * s, - sx * ( c * cx + s * cy ) + cx + tx,
+				- sy * s, sy * c, - sy * ( - s * cx + c * cy ) + cy + ty,
+				0, 0, 1
+			);
+
+		},
+
+		scale: function ( sx, sy ) {
+
+			var te = this.elements;
+
+			te[ 0 ] *= sx; te[ 3 ] *= sx; te[ 6 ] *= sx;
+			te[ 1 ] *= sy; te[ 4 ] *= sy; te[ 7 ] *= sy;
+
+			return this;
+
+		},
+
+		rotate: function ( theta ) {
+
+			var c = Math.cos( theta );
+			var s = Math.sin( theta );
+
+			var te = this.elements;
+
+			var a11 = te[ 0 ], a12 = te[ 3 ], a13 = te[ 6 ];
+			var a21 = te[ 1 ], a22 = te[ 4 ], a23 = te[ 7 ];
+
+			te[ 0 ] = c * a11 + s * a21;
+			te[ 3 ] = c * a12 + s * a22;
+			te[ 6 ] = c * a13 + s * a23;
+
+			te[ 1 ] = - s * a11 + c * a21;
+			te[ 4 ] = - s * a12 + c * a22;
+			te[ 7 ] = - s * a13 + c * a23;
+
+			return this;
+
+		},
+
+		translate: function ( tx, ty ) {
+
+			var te = this.elements;
+
+			te[ 0 ] += tx * te[ 2 ]; te[ 3 ] += tx * te[ 5 ]; te[ 6 ] += tx * te[ 8 ];
+			te[ 1 ] += ty * te[ 2 ]; te[ 4 ] += ty * te[ 5 ]; te[ 7 ] += ty * te[ 8 ];
+
+			return this;
+
+		},
+
+		equals: function ( matrix ) {
+
+			var te = this.elements;
+			var me = matrix.elements;
+
+			for ( var i = 0; i < 9; i ++ ) {
+
+				if ( te[ i ] !== me[ i ] ) return false;
+
+			}
+
+			return true;
+
+		},
+
+		fromArray: function ( array, offset ) {
+
+			if ( offset === undefined ) offset = 0;
+
+			for ( var i = 0; i < 9; i ++ ) {
+
+				this.elements[ i ] = array[ i + offset ];
+
+			}
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			var te = this.elements;
+
+			array[ offset ] = te[ 0 ];
+			array[ offset + 1 ] = te[ 1 ];
+			array[ offset + 2 ] = te[ 2 ];
+
+			array[ offset + 3 ] = te[ 3 ];
+			array[ offset + 4 ] = te[ 4 ];
+			array[ offset + 5 ] = te[ 5 ];
+
+			array[ offset + 6 ] = te[ 6 ];
+			array[ offset + 7 ] = te[ 7 ];
+			array[ offset + 8 ] = te[ 8 ];
+
+			return array;
+
+		},
+
+
+		"_construct" : function () {
+
+			this.elements = [
+
+				1, 0, 0,
+				0, 1, 0,
+				0, 0, 1
+
+			];
+
+			if ( arguments.length > 0 ) {
+
+				console.error( 'Matrix3: the constructor no longer reads arguments. use .set() instead.' );
+
+			}
+
+		}
+
+	});
+
+
+	return numerics.Matrix3 = Matrix3;
+});
+define('skylark-langx-numerics/Transform',[
+	"skylark-langx-klass",	
+    "./numerics",
+], function(klass,numerics) {
+
+    var Transform =  klass({
+        "klassName": "Transform",
+		"value": {
+			get : function(){
+				return this._.value;
+			}
+		}
+	});
+
+	return numerics.Transform =Transform;
+});
+
+define('skylark-langx-numerics/MatrixTransform',[
+    "./numerics",
+	"./Transform"
+],function(numerics,Transform) {
+
+    var MatrixTransform =  Transform.inherit({
+        "klassName": "MatrixTransform",
+
+		"value"	:	{
+			get : function(){
+				return this.matrix.clone();
+			}
+		},
+		
+		"matrix" : {
+			get : function(){
+				return this._.matrix;
+			}
+		},
+
+		clone : /*ScaleTransform*/function() {
+		},
+		
+		transform : /*Point*/function(/*Point*/point) {
+		},
+		
+		//�w�肳�ꂽ���E�{�b�N�X��ϊ����A��������傤�Ǌi�[�ł���傫���̎����s���E�{�b�N�X��Ԃ��܂��B
+		transformBounds : /*Rect*/function(/*Rect*/rect) {
+		},		
+		"_construct" : function(/*Martix*/matrix) {
+            var _ = this._ = {};
+			
+			_.matrix = matrix;
+		}
+				
+	});
+
+	return numerics.MatrixTransform = MatrixTransform;
+	
+});	
+
+define('skylark-langx-numerics/Plane',[
+	"skylark-langx-klass",
+	"./numerics",
+	"./Matrix3",
+	"./Vector3"
+] ,function(
+	klass,
+	numerics,
+	Matrix3,
+	Vector3
+) {
+
+
+	var _vector1 = new Vector3();
+	var _vector2 = new Vector3();
+	var _normalMatrix = new Matrix3();
+
+	var Plane = klass({
+		"klassName" : "Plane",
+
+		set: function ( normal, constant ) {
+
+			this.normal.copy( normal );
+			this.constant = constant;
+
+			return this;
+
+		},
+
+		setComponents: function ( x, y, z, w ) {
+
+			this.normal.set( x, y, z );
+			this.constant = w;
+
+			return this;
+
+		},
+
+		setFromNormalAndCoplanarPoint: function ( normal, point ) {
+
+			this.normal.copy( normal );
+			this.constant = - point.dot( this.normal );
+
+			return this;
+
+		},
+
+		setFromCoplanarPoints: function ( a, b, c ) {
+
+			var normal = _vector1.subVectors( c, b ).cross( _vector2.subVectors( a, b ) ).normalize();
+
+			// Q: should an error be thrown if normal is zero (e.g. degenerate plane)?
+
+			this.setFromNormalAndCoplanarPoint( normal, a );
+
+			return this;
+
+		},
+
+		clone: function () {
+
+			return new this.constructor().copy( this );
+
+		},
+
+		copy: function ( plane ) {
+
+			this.normal.copy( plane.normal );
+			this.constant = plane.constant;
+
+			return this;
+
+		},
+
+		normalize: function () {
+
+			// Note: will lead to a divide by zero if the plane is invalid.
+
+			var inverseNormalLength = 1.0 / this.normal.length();
+			this.normal.multiplyScalar( inverseNormalLength );
+			this.constant *= inverseNormalLength;
+
+			return this;
+
+		},
+
+		negate: function () {
+
+			this.constant *= - 1;
+			this.normal.negate();
+
+			return this;
+
+		},
+
+		distanceToPoint: function ( point ) {
+
+			return this.normal.dot( point ) + this.constant;
+
+		},
+
+		distanceToSphere: function ( sphere ) {
+
+			return this.distanceToPoint( sphere.center ) - sphere.radius;
+
+		},
+
+		projectPoint: function ( point, target ) {
+
+			if ( target === undefined ) {
+
+				console.warn( 'mathsPlane: .projectPoint() target is now required' );
+				target = new Vector3();
+
+			}
+
+			return target.copy( this.normal ).multiplyScalar( - this.distanceToPoint( point ) ).add( point );
+
+		},
+
+		intersectLine: function ( line, target ) {
+
+			if ( target === undefined ) {
+
+				console.warn( 'mathsPlane: .intersectLine() target is now required' );
+				target = new Vector3();
+
+			}
+
+			var direction = line.delta( _vector1 );
+
+			var denominator = this.normal.dot( direction );
+
+			if ( denominator === 0 ) {
+
+				// line is coplanar, return origin
+				if ( this.distanceToPoint( line.start ) === 0 ) {
+
+					return target.copy( line.start );
+
+				}
+
+				// Unsure if this is the correct method to handle this case.
+				return undefined;
+
+			}
+
+			var t = - ( line.start.dot( this.normal ) + this.constant ) / denominator;
+
+			if ( t < 0 || t > 1 ) {
+
+				return undefined;
+
+			}
+
+			return target.copy( direction ).multiplyScalar( t ).add( line.start );
+
+		},
+
+		intersectsLine: function ( line ) {
+
+			// Note: this tests if a line intersects the plane, not whether it (or its end-points) are coplanar with it.
+
+			var startSign = this.distanceToPoint( line.start );
+			var endSign = this.distanceToPoint( line.end );
+
+			return ( startSign < 0 && endSign > 0 ) || ( endSign < 0 && startSign > 0 );
+
+		},
+
+		intersectsBox: function ( box ) {
+
+			return box.intersectsPlane( this );
+
+		},
+
+		intersectsSphere: function ( sphere ) {
+
+			return sphere.intersectsPlane( this );
+
+		},
+
+		coplanarPoint: function ( target ) {
+
+			if ( target === undefined ) {
+
+				console.warn( 'mathsPlane: .coplanarPoint() target is now required' );
+				target = new Vector3();
+
+			}
+
+			return target.copy( this.normal ).multiplyScalar( - this.constant );
+
+		},
+
+		applyMatrix4: function ( matrix, optionalNormalMatrix ) {
+
+			var normalMatrix = optionalNormalMatrix || _normalMatrix.getNormalMatrix( matrix );
+
+			var referencePoint = this.coplanarPoint( _vector1 ).applyMatrix4( matrix );
+
+			var normal = this.normal.applyMatrix3( normalMatrix ).normalize();
+
+			this.constant = - referencePoint.dot( normal );
+
+			return this;
+
+		},
+
+		translate: function ( offset ) {
+
+			this.constant -= offset.dot( this.normal );
+
+			return this;
+
+		},
+
+		equals: function ( plane ) {
+
+			return plane.normal.equals( this.normal ) && ( plane.constant === this.constant );
+
+		},
+
+
+		"_construct" : function( normal, constant ) {
+
+			// normal is assumed to be normalized
+
+			this.normal = ( normal !== undefined ) ? normal : new Vector3( 1, 0, 0 );
+			this.constant = ( constant !== undefined ) ? constant : 0;
+
+		}
+
+	});
+
+
+	return numerics.Plane = Plane;
+});
+define('skylark-langx-numerics/RotateTransform',[
+    "./numerics",
+	"./Transform",
+	"./MatrixTransform"
+],function(numerics,Transform,Matrix) {
+
+
+    var RotateTransform = numerics.RotateTransform = Transform.inherit({
+        "klassName": "RotateTransform",
+
+        "value": {
+            get: function() {
+                return Matrix.rotateAt(this.angle, this.centerX, this.centerY);
+            }
+        },
+
+        "angle": {
+            get : function() {
+                return this._.angle;
+            }
+        },
+        // cy: Number
+        //		The Y coordinate of the center of the circle, default value 0.
+        "centerX": {
+            get : function() {
+                return this._.centerX;
+            }
+        },
+        // r: Number
+        //		The radius, default value 100.
+        "centerY": {
+            get : function() {
+                return this._.centerY;
+            }
+        },
+
+		clone : /*ScaleTransform*/function() {
+		},
+		
+		transform : /*Point*/function(/*Point*/point) {
+		},
+		
+		transformBounds : /*Rect*/function(/*Rect*/rect) {
+		},
+		
+		"init" : function(/*Number*/angle,/*Number*/centerX,/*Number*/centerY) {
+			var _ = this._ = {};
+			_.angle = angle ? angle :0;
+			_.centerX = centerX ? centerX :0;
+			_.centerY = centerY ? centerY :0;
+		}
+	});
+
+	return RotateTransform;
+	
+});	
+
+define('skylark-langx-numerics/ScaleTransform',[
+    "./numerics",
+    "./Transform",
+    "./MatrixTransform"
+], function(numerics, Transform, Matrix) {
+
+   var ScaleTransform =  Transform.inherit({
+        "klassName": "ScaleTransform",
+
+        "value": {
+            get: function() {
+                    return Matrix.scaleAt(this.scaleX, this.scaleY, this.centerX, this.centerY);
+            }
+        },
+
+        "scaleX": {
+            get : function() {
+                return this._.scaleX;
+            }
+        },
+
+        "scaleY": {
+            get : function() {
+                return this._.scaleY;
+            }
+        },
+
+        // cy: Number
+        //      The Y coordinate of the center of the circle, default value 0.
+        "centerX": {
+            get : function() {
+                return this._.centerX;
+            }
+        },
+        // r: Number
+        //      The radius, default value 100.
+        "centerY": {
+            get : function() {
+                return this._.centerY;
+            }
+        },
+
+        clone: /*ScaleTransform*/ function() {},
+
+        transform: /*Point*/ function( /*Point*/ point) {},
+
+        transformBounds: /*Rect*/ function( /*Rect*/ rect) {},
+
+        "_construct": function( /*Number*/ scaleX, /*Number*/ scaleY, /*Number*/ centerX, /*Number*/ centerY) {
+            var _ = this._ = {};
+
+            _.scaleX = scaleX ? scaleX : 1;
+            _.scaleY = scaleY ? scaleY : 1;
+            _.centerX = centerX ? centerX : 0;
+            _.centerY = centerY ? centerY : 0;
+        }
+    });
+
+    return numerics.ScaleTransform = ScaleTransform;
+
+});
+
+define('skylark-langx-numerics/SkewTransform',[
+    "./numerics",
+    "./Transform",
+    "./MatrixTransform"
+], function(numerics, Transform, Matrix) {
+
+   var SkewTransform = Transform.inherit({
+        "klassName": "SkewTransform",
+
+        "value": {
+            get: function() {
+                    return Matrix.scaleAt(this.skewX, this.skewY);
+            }
+        },
+
+        "skewX": {
+            get : function() {
+                return this._.skewX;
+            }
+        },
+
+        "skewY": {
+            get : function() {
+                return this._.skewY;
+            }
+        },
+
+        clone: /*SkewTransform*/ function() {},
+
+        transform: /*Point*/ function( /*Point*/ point) {},
+
+        transformBounds: /*Rect*/ function( /*Rect*/ rect) {},
+
+        "_construct": function( /*Number*/ skewX, /*Number*/ skewY) {
+            var _ = this._ = {};
+
+            _.skewX = skewX ? skewX : 0;
+            _.skewY = skewY ? skewY : 0;
+        }
+    });
+
+    return numerics.SkewTransform = SkewTransform;
+
+});
+
+define('skylark-langx-numerics/Vector2',[
+	"skylark-langx-klass",
+	"./numerics"
+] ,function(klass,numerics) {
+
+	var Vector2 = klass({
+		"klassName" : "Vector2",
+
+		set: function ( x, y ) {
+
+			this.x = x;
+			this.y = y;
+
+			return this;
+
+		},
+
+		setScalar: function ( scalar ) {
+
+			this.x = scalar;
+			this.y = scalar;
+
+			return this;
+		},
+
+		setX: function ( x ) {
+
+			this.x = x;
+
+			return this;
+
+		},
+
+		setY: function ( y ) {
+
+			this.y = y;
+
+			return this;
+
+		},
+
+
+		clone: function () {
+
+			return new this.constructor( this.x, this.y );
+
+		},
+
+		copy: function ( v ) {
+
+			this.x = v.x;
+			this.y = v.y;
+
+			return this;
+
+		},
+
+		add: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'Vector2: .add() now only accepts one argument. Use .addVectors( a, b ) instead.' );
+				return this.addVectors( v, w );
+
+			}
+
+			this.x += v.x;
+			this.y += v.y;
+
+			return this;
+
+		},
+
+		addScalar: function ( s ) {
+
+			this.x += s;
+			this.y += s;
+
+			return this;
+
+		},
+
+		addVectors: function ( a, b ) {
+
+			this.x = a.x + b.x;
+			this.y = a.y + b.y;
+
+			return this;
+
+		},
+
+		addScaledVector: function ( v, s ) {
+
+			this.x += v.x * s;
+			this.y += v.y * s;
+
+			return this;
+
+		},
+
+		sub: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'Vector2: .sub() now only accepts one argument. Use .subVectors( a, b ) instead.' );
+				return this.subVectors( v, w );
+
+			}
+
+			this.x -= v.x;
+			this.y -= v.y;
+
+			return this;
+
+		},
+
+		subScalar: function ( s ) {
+
+			this.x -= s;
+			this.y -= s;
+
+			return this;
+
+		},
+
+		subVectors: function ( a, b ) {
+
+			this.x = a.x - b.x;
+			this.y = a.y - b.y;
+
+			return this;
+
+		},
+
+		multiply: function ( v ) {
+
+			this.x *= v.x;
+			this.y *= v.y;
+
+			return this;
+
+		},
+
+		multiplyScalar: function ( scalar ) {
+
+			this.x *= scalar;
+			this.y *= scalar;
+
+			return this;
+
+		},
+
+		divide: function ( v ) {
+
+			this.x /= v.x;
+			this.y /= v.y;
+
+			return this;
+
+		},
+
+		divideScalar: function ( scalar ) {
+
+			return this.multiplyScalar( 1 / scalar );
+
+		},
+
+		applyMatrix3: function ( m ) {
+
+			var x = this.x, y = this.y;
+			var e = m.elements;
+
+			this.x = e[ 0 ] * x + e[ 3 ] * y + e[ 6 ];
+			this.y = e[ 1 ] * x + e[ 4 ] * y + e[ 7 ];
+
+			return this;
+
+		},
+
+		min: function ( v ) {
+
+			this.x = Math.min( this.x, v.x );
+			this.y = Math.min( this.y, v.y );
+
+			return this;
+
+		},
+
+		max: function ( v ) {
+
+			this.x = Math.max( this.x, v.x );
+			this.y = Math.max( this.y, v.y );
+
+			return this;
+
+		},
+
+		clamp: function ( min, max ) {
+
+			// assumes min < max, componentwise
+
+			this.x = Math.max( min.x, Math.min( max.x, this.x ) );
+			this.y = Math.max( min.y, Math.min( max.y, this.y ) );
+
+			return this;
+
+		},
+
+		clampScalar: function ( minVal, maxVal ) {
+
+			this.x = Math.max( minVal, Math.min( maxVal, this.x ) );
+			this.y = Math.max( minVal, Math.min( maxVal, this.y ) );
+
+			return this;
+
+		},
+
+		clampLength: function ( min, max ) {
+
+			var length = this.length();
+
+			return this.divideScalar( length || 1 ).multiplyScalar( Math.max( min, Math.min( max, length ) ) );
+
+		},
+
+		floor: function () {
+
+			this.x = Math.floor( this.x );
+			this.y = Math.floor( this.y );
+
+			return this;
+
+		},
+
+		ceil: function () {
+
+			this.x = Math.ceil( this.x );
+			this.y = Math.ceil( this.y );
+
+			return this;
+
+		},
+
+		round: function () {
+
+			this.x = Math.round( this.x );
+			this.y = Math.round( this.y );
+
+			return this;
+
+		},
+
+		roundToZero: function () {
+
+			this.x = ( this.x < 0 ) ? Math.ceil( this.x ) : Math.floor( this.x );
+			this.y = ( this.y < 0 ) ? Math.ceil( this.y ) : Math.floor( this.y );
+
+			return this;
+
+		},
+
+		negate: function () {
+
+			this.x = - this.x;
+			this.y = - this.y;
+
+			return this;
+
+		},
+
+		dot: function ( v ) {
+
+			return this.x * v.x + this.y * v.y;
+
+		},
+
+		cross: function ( v ) {
+
+			return this.x * v.y - this.y * v.x;
+
+		},
+
+		lengthSq: function () {
+
+			return this.x * this.x + this.y * this.y;
+
+		},
+
+		length: function () {
+
+			return Math.sqrt( this.x * this.x + this.y * this.y );
+
+		},
+
+		manhattanLength: function () {
+
+			return Math.abs( this.x ) + Math.abs( this.y );
+
+		},
+
+		normalize: function () {
+
+			return this.divideScalar( this.length() || 1 );
+
+		},
+
+		angle: function () {
+
+			// computes the angle in radians with respect to the positive x-axis
+
+			var angle = Math.atan2( - this.y, - this.x ) + Math.PI;
+
+			return angle;
+
+		},
+
+		distanceTo: function ( v ) {
+
+			return Math.sqrt( this.distanceToSquared( v ) );
+
+		},
+
+		distanceToSquared: function ( v ) {
+
+			var dx = this.x - v.x, dy = this.y - v.y;
+			return dx * dx + dy * dy;
+
+		},
+
+		manhattanDistanceTo: function ( v ) {
+
+			return Math.abs( this.x - v.x ) + Math.abs( this.y - v.y );
+
+		},
+
+		setLength: function ( length ) {
+
+			return this.normalize().multiplyScalar( length );
+
+		},
+
+		lerp: function ( v, alpha ) {
+
+			this.x += ( v.x - this.x ) * alpha;
+			this.y += ( v.y - this.y ) * alpha;
+
+			return this;
+
+		},
+
+		lerpVectors: function ( v1, v2, alpha ) {
+
+			return this.subVectors( v2, v1 ).multiplyScalar( alpha ).add( v1 );
+
+		},
+
+		equals: function ( v ) {
+
+			return ( ( v.x === this.x ) && ( v.y === this.y ) );
+
+		},
+
+		fromArray: function ( array, offset ) {
+
+			if ( offset === undefined ) offset = 0;
+
+			this.x = array[ offset ];
+			this.y = array[ offset + 1 ];
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			array[ offset ] = this.x;
+			array[ offset + 1 ] = this.y;
+
+			return array;
+
+		},
+
+
+		rotateAround: function ( center, angle ) {
+
+			var c = Math.cos( angle ), s = Math.sin( angle );
+
+			var x = this.x - center.x;
+			var y = this.y - center.y;
+
+			this.x = x * c - y * s + center.x;
+			this.y = x * s + y * c + center.y;
+
+			return this;
+		},
+
+		"_construct" : function ( x, y ) {
+
+			this.x = x || 0;
+			this.y = y || 0;
+
+		}
+
+
+	});
+
+
+	/*
+	Object.defineProperties( Vector2.prototype, {
+
+		"width": {
+
+			get: function () {
+
+				return this.x;
+
+			},
+
+			set: function ( value ) {
+
+				this.x = value;
+
+			}
+
+		},
+
+		"height": {
+
+			get: function () {
+
+				return this.y;
+
+			},
+
+			set: function ( value ) {
+
+				this.y = value;
+
+			}
+
+		}
+
+	} );
+	*/
+
+
+
+
+	return numerics.Vector2 = Vector2 ;
+});
+
+define( 'skylark-langx-numerics/TransformMatrix',[
+    "skylark-langx-klass",
+    "./numerics",
+    "./Vector2"
+], function(klass,numerics,Vector2){
+	// reference easeljs/numerics/Matrix2D  and dojox/gfx/matrix
+	
+	var DEG_TO_RAD = Math.PI/180;
+	var _degToRadCache = {};
+	var degToRad = function(degree){
+		return _degToRadCache[degree] || (_degToRadCache[degree] = (Math.PI * degree / 180));
+	};
+	var radToDeg = function(radian){ return radian / Math.PI * 180; };
+	
+
+	//Represents a 3 x 3 affine transformation matrix used for transformation in 2-D space.
+	//|----------|
+	//|m11|m21|dx| 
+	//|----------|
+	//|m12|m22|dy|
+	//|----------|
+	//|  0|  0| 1|
+	//|----------|
+	
+    var TransformMatrix =  klass({
+        "klassName": "TransformMatrix",
+
+		"_multiplyPoint"	: 	function(p){
+			// summary:
+			//		applies the matrix to a point
+			// p: Point
+			//		a point
+			// returns: Point
+			var _ = this._,
+				x = p.x * _.m11 + p.y * _.m21  + _.dx,
+			    y = p.x * _.m12 +  p.y * _.m22 + _.dy;
+
+			return new Vector2(x,y); // Point
+		},
+
+       "m11": {
+       		//Position (0, 0) in a 3x3 affine transformation matrix.
+            get : function() {
+                return this._.m11;
+            }
+        },
+
+       "m12": {
+       		//Position (0, 1) in a 3x3 affine transformation matrix.
+            get : function() {
+                return this._.m12;
+            }
+        },
+
+       "m21": {
+       		//Position (1, 0) in a 3x3 affine transformation matrix.
+            get : function() {
+                return this._.m21;
+            }
+        },
+
+       "m22": {
+       		//Position (1, 1) in a 3x3 affine transformation matrix.
+            get : function() {
+                return this._.m22;
+            }
+        },
+
+       "dx": {
+       		// Position (2, 1) in a 3x3 affine transformation matrix.
+            get : function() {
+                return this._.dx;
+            }
+        },
+
+       "dy": {
+       		// Position (2, 1) in a 3x3 affine transformation matrix.
+            get : function() {
+                return this._.dy;
+            }
+        },
+
+       "alpha": {
+       		// Property representing the alpha that will be applied to a display object. This is not part of matrix
+       		// operations, but is used for operations like getConcatenatedMatrix to provide concatenated alpha values.
+            get : function() {
+                return this._.alpha;
+            }
+        },
+
+       "shadow": {
+       		// Property representing the shadow that will be applied to a display object. This is not part of matrix
+       		// operations, but is used for operations like getConcatenatedMatrix to provide concatenated shadow values..
+            get : function() {
+                return this._.shadow;
+            }
+        },
+
+       "compositeOperation": {
+			/**
+			 * Property representing the compositeOperation that will be applied to a display object. This is not part of
+			 * matrix operations, but is used for operations like getConcatenatedMatrix to provide concatenated
+			 * compositeOperation values. You can find a list of valid composite operations at:
+			 * <a href="https://developer.mozilla.org/en/Canvas_tutorial/Compositing">https://developer.mozilla.org/en/Canvas_tutorial/Compositing</a>
+			 * @property compositeOperation
+			 * @type String
+			 **/
+            get : function() {
+                return this._.compositeOperation;
+            }
+        },
+
+        //Converts the specified point with TransformMatrix and returns the result.
+		multiplyPoint: /*Vector2*/function(/*Vector2 */ p){
+			// summary:
+			//		applies the matrix to a point
+			return this._multiplyPoint(p); // Vector2
+		},
+				/**
+				 * 指定した矩形を TransformMatrix で変換し、その結果を返します。
+				 */
+		multiplyRectangle: /*Rect*/function(/*Rect*/ rect){
+			// summary:
+			//		Applies the matrix to a rectangle.
+			// returns: Rect
+			if(this.isIdentity())
+				return rect.clone(); // Rect
+			var p0 = this.multiplyPoint(rect.leftTop),
+				p1 = this.multiplyPoint(rect.leftBottom),
+				p2 = this.multiplyPoint(rect.right),
+				p3 = this.multiplyPoint(rect.rightBottom),
+				minx = Math.min(p0.x, p1.x, p2.x, p3.x),
+				miny = Math.min(p0.y, p1.y, p2.y, p3.y),
+				maxx = Math.max(p0.x, p1.x, p2.x, p3.x),
+				maxy = Math.max(p0.y, p1.y, p2.y, p3.y);
+			return new Rect(minx,miny,maxx-minx,maxy-miny);  // Rect
+		},
+		/**
+		 * Concatenates the specified matrix properties with this matrix. All parameters are required.
+		 * @method prepend
+		 * @param {Number} m11
+		 * @param {Number} m12
+		 * @param {Number} m21
+		 * @param {Number} m22
+		 * @param {Number} dx
+		 * @param {Number} dy
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		prepend : function(m11, m12, m21, m22, dx, dy) {
+			var tx1 = this.dx;
+			if (m11 != 1 || m12 != 0 || m21 != 0 || m22 != 1) {
+				var a1 = this.m11;
+				var c1 = this.m21;
+				this.m11  = a1*m11+this.m12*m21;
+				this.m12  = a1*m12+this.m12*m22;
+				this.m21  = c1*m11+this.m22*m21;
+				this.m22  = c1*m12+this.m22*m22;
+			}
+			this.dx = tx1*m11+this.dy*m21+dx;
+			this.dy = tx1*m12+this.dy*m22+dy;
+			return this;
+		},
+
+		/**
+		 * Appends the specified matrix properties with this matrix. All parameters are required.
+		 * 指定した Matrixをこの Matrixに追加します。
+		 * @method append
+		 * @param {Number} m11
+		 * @param {Number} m12
+		 * @param {Number} m21
+		 * @param {Number} m22
+		 * @param {Number} dx
+		 * @param {Number} dy
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		append : function(m11, m12, m21, m22, dx, dy) {
+			var a1 = this.m11;
+			var b1 = this.m12;
+			var c1 = this.m21;
+			var d1 = this.m22;
+
+			this.m11  = m11*a1+m12*c1;
+			this.m12  = m11*b1+m12*d1;
+			this.m21  = m21*a1+m22*c1;
+			this.m22  = m21*b1+m22*d1;
+			this.dx = dx*a1+dy*c1+this.dx;
+			this.dy = dx*b1+dy*d1+this.dy;
+			return this;
+		},
+
+		/**
+		 * Prepends the specified matrix with this matrix.
+		 * @method prependMatrix
+		 * @param {TransformMatrix} matrix
+		 **/
+		prependMatrix : function(matrix) {
+			this.prepend(matrix.m11, matrix.m12, matrix.m21, matrix.m22, matrix.dx, matrix.dy);
+			this.prependProperties(matrix.alpha, matrix.shadow,  matrix.compositeOperation);
+			return this;
+		},
+
+		/**
+		 * Appends the specified matrix with this matrix.
+		 * 指定した Matrixをこの Matrixに追加します。
+		 * @method appendMatrix
+		 * @param {TransformMatrix} matrix
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		appendMatrix : function(matrix) {
+			this.append(matrix.m11, matrix.m12, matrix.m21, matrix.m22, matrix.dx, matrix.dy);
+			this.appendProperties(matrix.alpha, matrix.shadow,  matrix.compositeOperation);
+			return this;
+		},
+
+		/**
+		 * Generates matrix properties from the specified display object transform properties, and prepends them with this matrix.
+		 * For example, you can use this to generate a matrix from a display object: var mtx = new TransformMatrix();
+		 * mtx.prependTransform(o.x, o.y, o.scaleX, o.scaleY, o.rotation);
+		 * @method prependTransform
+		 * @param {Number} x
+		 * @param {Number} y
+		 * @param {Number} scaleX
+		 * @param {Number} scaleY
+		 * @param {Number} rotation
+		 * @param {Number} skewX
+		 * @param {Number} skewY
+		 * @param {Number} regX Optional.
+		 * @param {Number} regY Optional.
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		prependTransform : function(x, y, scaleX, scaleY, rotation, skewX, skewY, regX, regY) {
+			if (rotation%360) {
+				var r = rotation*DEG_TO_RAD;
+				var cos = Math.cos(r);
+				var sin = Math.sin(r);
+			} else {
+				cos = 1;
+				sin = 0;
+			}
+
+			if (regX || regY) {
+				// append the registration offset:
+				this.dx -= regX; this.dy -= regY;
+			}
+			if (skewX || skewY) {
+				// TODO: can this be combined into a single prepend operation?
+				skewX *= DEG_TO_RAD;
+				skewY *= DEG_TO_RAD;
+				this.prepend(cos*scaleX, sin*scaleX, -sin*scaleY, cos*scaleY, 0, 0);
+				this.prepend(Math.cos(skewY), Math.sin(skewY), -Math.sin(skewX), Math.cos(skewX), x, y);
+			} else {
+				this.prepend(cos*scaleX, sin*scaleX, -sin*scaleY, cos*scaleY, x, y);
+			}
+			return this;
+		},
+
+		/**
+		 * Generates matrix properties from the specified display object transform properties, and appends them with this matrix.
+		 * For example, you can use this to generate a matrix from a display object: var mtx = new TransformMatrix();
+		 * mtx.appendTransform(o.x, o.y, o.scaleX, o.scaleY, o.rotation);
+		 * @method appendTransform
+		 * @param {Number} x
+		 * @param {Number} y
+		 * @param {Number} scaleX
+		 * @param {Number} scaleY
+		 * @param {Number} rotation
+		 * @param {Number} skewX
+		 * @param {Number} skewY
+		 * @param {Number} regX Optional.
+		 * @param {Number} regY Optional.
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		appendTransform : function(x, y, scaleX, scaleY, rotation, skewX, skewY, regX, regY) {
+			if (rotation%360) {
+				var r = rotation*DEG_TO_RAD;
+				var cos = Math.cos(r);
+				var sin = Math.sin(r);
+			} else {
+				cos = 1;
+				sin = 0;
+			}
+
+			if (skewX || skewY) {
+				// TODO: can this be combined into a single append?
+				skewX *= DEG_TO_RAD;
+				skewY *= DEG_TO_RAD;
+				this.append(Math.cos(skewY), Math.sin(skewY), -Math.sin(skewX), Math.cos(skewX), x, y);
+				this.append(cos*scaleX, sin*scaleX, -sin*scaleY, cos*scaleY, 0, 0);
+			} else {
+				this.append(cos*scaleX, sin*scaleX, -sin*scaleY, cos*scaleY, x, y);
+			}
+
+			if (regX || regY) {
+				// prepend the registration offset:
+				this.dx -= regX*this.m11+regY*this.m21; 
+				this.dy -= regX*this.m12+regY*this.m22;
+			}
+			return this;
+		},
+
+		/**
+		 * Applies a rotation transformation to the matrix.
+		 * @method rotate
+		 * @param {Number} angle The angle in degrees.
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		rotate : function(angle) {
+			var cos = Math.cos(angle);
+			var sin = Math.sin(angle);
+
+			var a1 = this.m11;
+			var c1 = this.m21;
+			var tx1 = this.dx;
+
+			this.m11 = a1*cos-this.m12*sin;
+			this.m12 = a1*sin+this.m12*cos;
+			this.m21 = c1*cos-this.m22*sin;
+			this.m22 = c1*sin+this.m22*cos;
+			this.dx = tx1*cos-this.dy*sin;
+			this.dy = tx1*sin+this.dy*cos;
+			return this;
+		},
+
+		/**
+		 * Applies a skew transformation to the matrix.
+		 * @method skew
+		 * @param {Number} skewX The amount to skew horizontally in degrees.
+		 * @param {Number} skewY The amount to skew vertically in degrees.
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		*/
+		skew : function(skewX, skewY) {
+			skewX = skewX*DEG_TO_RAD;
+			skewY = skewY*DEG_TO_RAD;
+			this.append(Math.cos(skewY), Math.sin(skewY), -Math.sin(skewX), Math.cos(skewX), 0, 0);
+			return this;
+		},
+
+		/**
+		 * Applies a scale transformation to the matrix.
+		 * @method scale
+		 * @param {Number} x
+		 * @param {Number} y
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		scale : function(x, y) {
+			this.m11 *= x;
+			this.m22 *= y;
+			this.dx *= x;
+			this.dy *= y;
+			return this;
+		},
+
+		/**
+		 * Translates the matrix on the x and y axes.
+		 * @method translate
+		 * @param {Number} x
+		 * @param {Number} y
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		translate : function(x, y) {
+			this.dx += x;
+			this.dy += y;
+			return this;
+		},
+
+		/**
+		 * Sets the properties of the matrix to those of an identity matrix (one that applies a null transformation).
+		 * @method identity
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		identity : function() {
+			this.alpha = this.m11 = this.m22 = 1;
+			this.m12 = this.m21 = this.dx = this.dy = 0;
+			this.shadow = this.compositeOperation = null;
+			return this;
+		},
+
+		/**
+		 * Inverts the matrix, causing it to perform the opposite transformation.
+		 * @method invert
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		 **/
+		invert : function() {
+			var a1 = this.m11;
+			var b1 = this.m12;
+			var c1 = this.m21;
+			var d1 = this.m22;
+			var tx1 = this.dx;
+			var n = a1*d1-b1*c1;
+
+			this.m11 = d1/n;
+			this.m12 = -b1/n;
+			this.m21 = -c1/n;
+			this.m22 = a1/n;
+			this.dx = (c1*this.dy-d1*tx1)/n;
+			this.dy = -(a1*this.dy-b1*tx1)/n;
+			return this;
+		},
+
+		/**
+		 * Returns true if the matrix is an identity matrix.
+		 * @method isIdentity
+		 * @return {Boolean}
+		 **/
+		isIdentity : function() {
+			return this.dx == 0 && this.dy == 0 && this.m11 == 1 && this.m12 == 0 && this.m21 == 0 && this.m22 == 1;
+		},
+
+		/**
+		 * Decomposes the matrix into transform properties (x, y, scaleX, scaleY, and rotation). Note that this these values
+		 * may not match the transform properties you used to generate the matrix, though they will produce the same visual
+		 * results.
+		 * @method decompose
+		 * @param {Object} target The object to apply the transform properties to. If null, then a new object will be returned.
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		*/
+		decompose : function(target) {
+			// TODO: it would be nice to be able to solve for whether the matrix can be decomposed into only scale/rotation
+			// even when scale is negative
+			if (target == null) { target = {}; }
+			target.x = this.dx;
+			target.y = this.dy;
+			target.scaleX = Math.sqrt(this.m11 * this.m11 + this.m12 * this.m12);
+			target.scaleY = Math.sqrt(this.m21 * this.m21 + this.m22 * this.m22);
+
+			var skewX = Math.atan2(-this.m21, this.m22);
+			var skewY = Math.atan2(this.m12, this.m11);
+
+			if (skewX == skewY) {
+				target.rotation = skewY/DEG_TO_RAD;
+				if (this.m11 < 0 && this.m22 >= 0) {
+					target.rotation += (target.rotation <= 0) ? 180 : -180;
+				}
+				target.skewX = target.skewY = 0;
+			} else {
+				target.skewX = skewX/DEG_TO_RAD;
+				target.skewY = skewY/DEG_TO_RAD;
+			}
+			return target;
+		},
+
+		/**
+		 * Reinitializes all matrix properties to those specified.
+		 * @method appendProperties
+		 * @param {Number} m11
+		 * @param {Number} m12
+		 * @param {Number} m21
+		 * @param {Number} m22
+		 * @param {Number} dx
+		 * @param {Number} dy
+		 * @param {Number} alpha desired alpha value
+		 * @param {Shadow} shadow desired shadow value
+		 * @param {String} compositeOperation desired composite operation value
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		*/
+		reinitialize : function(m11,m12,m21,m22,dx,dy,alpha,shadow,compositeOperation) {
+			this._initialize(m11,m12,m21,m22,dx,dy);
+			this.alpha = alpha || 1;
+			this.shadow = shadow;
+			this.compositeOperation = compositeOperation;
+			return this;
+		},
+
+		/**
+		 * Appends the specified visual properties to the current matrix.
+		 * @method appendProperties
+		 * @param {Number} alpha desired alpha value
+		 * @param {Shadow} shadow desired shadow value
+		 * @param {String} compositeOperation desired composite operation value
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		*/
+		appendProperties : function(alpha, shadow, compositeOperation) {
+			this.alpha *= alpha;
+			this.shadow = shadow || this.shadow;
+			this.compositeOperation = compositeOperation || this.compositeOperation;
+			return this;
+		},
+
+		/**
+		 * Prepends the specified visual properties to the current matrix.
+		 * @method prependProperties
+		 * @param {Number} alpha desired alpha value
+		 * @param {Shadow} shadow desired shadow value
+		 * @param {String} compositeOperation desired composite operation value
+		 * @return {TransformMatrix} This matrix. Useful for chaining method calls.
+		*/
+		prependProperties : function(alpha, shadow, compositeOperation) {
+			this.alpha *= alpha;
+			this.shadow = this.shadow || shadow;
+			this.compositeOperation = this.compositeOperation || compositeOperation;
+			return this;
+		},
+
+		/**
+		 *Multiply TransformMatrix by another TransformMatrix.
+		 */
+		multiply: function(matrix){
+			// summary:
+			//		combines matrices by multiplying them sequentially in the given order
+			// matrix: TransformMatrix
+			//		a 2D matrix-like object,
+			//		all subsequent arguments are matrix-like objects too
+
+			// combine matrices
+			var m11 = this.m11,m12 = this.m12,m21 = this.m21,m22=this.m22,dx=this.dx,dy=this.dy;
+			var r = matrix;
+			this.m11 = m11 * r.m11 + m21 * r.m12;
+			this.m12 = m12 * r.m11 + m22 * r.m12;
+			this.m21 = m11 * r.m21 + m21 * r.m22;
+			this.m22 = m12 * r.m21 + m22 * r.m22;
+			this.dx =  m11 * r.dx + m21 * r.dy + dx;
+			this.dy =  m12 * r.dx + m22 * r.dy + dy;
+			return this // TransformMatrix
+		},
+
+		/**
+		 * Returns a clone of the TransformMatrix instance.
+		 * @method clone
+		 * @return {TransformMatrix} a clone of the TransformMatrix instance.
+		 **/
+		clone : function() {
+
+			var _ = this._,
+				mtx = new TransformMatrix(_.m11, _.m12, _.m21, _.m22, _.dx, _.dy);
+			mtx.shadow = this.shadow;
+			mtx.alpha = this.alpha;
+			mtx.compositeOperation = this.compositeOperation;
+			return mtx;
+		},
+
+		/**
+		 * Returns a string representation of this object.
+		 * @method toString
+		 * @return {String} a string representation of the instance.
+		 **/
+		toString : function() {
+			var _ = this._;
+			return "[TransformMatrix (m11="+_.m11+" m12="+_.m12+" m21="+_.m21+" m22="+_.m22+" dx="+_.dx+" dy="+_.dy+")]";
+		},
+		
+		"_construct" : function(m11, m12, m21, m22, dx, dy) {
+			var _ = this._ = {};
+			_.m11 = m11 || 1;
+			_.m12 = m12 || 0;
+			_.m21 = m21 || 0;
+			_.m22 = m22 || 1;
+			_.dx = dx || 0;
+			_.dy = dy || 0;
+		}
+
+	});
+	
+	Object.assign(TransformMatrix,{
+		translate: function(a, b){
+			// summary:
+			//		forms a translation matrix
+			// description:
+			//		The resulting matrix is used to translate (move) points by specified offsets.
+			// a: Number
+			//		an x coordinate value
+			// b: Number
+			//		a y coordinate value
+			// returns: TransformMatrix
+			//|----------| |-----------|
+			//|m11|m21|dx| |  1|   0| a|
+			//|----------| |-----------|
+			//|m12|m22|dy| |  0|   1| b|
+			//|----------| |-----------|
+			//|  0|  0| 1| |  0|   0| 1|
+			//|----------| |-----------|
+
+			return new TransformMatrix(1,0,0,1,a,b); // TransformMatrix
+		},
+		scale: function(a, b){
+			// summary:
+			//		forms a scaling matrix
+			// description:
+			//		The resulting matrix is used to scale (magnify) points by specified offsets.
+			// a: Number
+			//		a scaling factor used for the x coordinate
+			// b: Number?
+			//		a scaling factor used for the y coordinate
+			// returns: TransformMatrix
+			//|----------| |-----------|
+			//|m11|m21|dx| |  a|   0| 0|
+			//|----------| |-----------|
+			//|m12|m22|dy| |  0|   b| 0|
+			//|----------| |-----------|
+			//|  0|  0| 1| |  0|   0| 1|
+			//|----------| |-----------|
+			return new TransformMatrix(a,0,0,b?b:a,0,0); // TransformMatrix
+		},
+		rotate: function(angle){
+			// summary:
+			//		forms a rotating matrix
+			// description:
+			//		The resulting matrix is used to rotate points
+			//		around the origin of coordinates (0, 0) by specified angle.
+			// angle: Number
+			//		an angle of rotation in radians (>0 for CW)
+			// returns: TransformMatrix
+			//|----------| |-----------|
+			//|m11|m21|dx| |cos|-sin| 0|
+			//|----------| |-----------|
+			//|m12|m22|dy| |sin| cos| 0|
+			//|----------| |-----------|
+			//|  0|  0| 1| |  0|   0| 1|
+			//|----------| |-----------|
+			var cos = Math.cos(angle);
+			var sin = Math.sin(angle);
+			return new TransformMatrix(cos,sin,-sin,cos,0,0); // TransformMatrix
+		},
+		rotateg: function(degree){
+			// summary:
+			//		forms a rotating matrix
+			// description:
+			//		The resulting matrix is used to rotate points
+			//		around the origin of coordinates (0, 0) by specified degree.
+			//		Seerotate() for comparison.
+			// degree: Number
+			//		an angle of rotation in degrees (>0 for CW)
+			// returns: TransformMatrix
+			return this.rotate(degToRad(degree)); // TransformMatrix
+		},
+		skewX: function(angle) {
+			//TODO : will be modified
+			// summary:
+			//		forms an x skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the x dimension
+			//		around the origin of coordinates (0, 0) by specified angle.
+			// angle: Number
+			//		a skewing angle in radians
+			// returns: TransformMatrix
+			//|----------| |-----------|
+			//|m11|m21|dx| |  1| tan| 0|
+			//|----------| |-----------|
+			//|m12|m22|dy| |  0|   1| 0|
+			//|----------| |-----------|
+			//|  0|  0| 1| |  0|   0| 1|
+			//|----------| |-----------|
+			var tan = Math.tan(angle);
+			return new TransformMatrix(1,0,tan,1); // TransformMatrix
+		},
+		skewXg: function(degree){
+			//TODO : will be modified
+			// summary:
+			//		forms an x skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the x dimension
+			//		around the origin of coordinates (0, 0) by specified degree.
+			//		See dojox/gfx/matrix.skewX() for comparison.
+			// degree: Number
+			//		a skewing angle in degrees
+			// returns: TransformMatrix
+			return this.skewX(degToRad(degree)); // dojox/gfx/matrix.TransformMatrix
+		},
+		skewY: function(angle){
+			//TODO : will be modified
+			// summary:
+			//		forms a y skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the y dimension
+			//		around the origin of coordinates (0, 0) by specified angle.
+			// angle: Number
+			//		a skewing angle in radians
+			// returns: TransformMatrix
+			//|----------| |-----------|
+			//|m11|m21|dx| |  1|   0| 0|
+			//|----------| |-----------|
+			//|m12|m22|dy| |tan|   1| 0|
+			//|----------| |-----------|
+			//|  0|  0| 1| |  0|   0| 1|
+			//|----------| |-----------|
+			var tan = Math.tan(angle);
+
+			return new TransformMatrix(1,tan,0,1); // TransformMatrix
+		},
+		skewYg: function(degree){
+			//TODO : will be modified
+			// summary:
+			//		forms a y skewing matrix
+			// description:
+			//		The resulting matrix is used to skew points in the y dimension
+			//		around the origin of coordinates (0, 0) by specified degree.
+			//		See skewY() for comparison.
+			// degree: Number
+			//		a skewing angle in degrees
+			// returns: TransformMatrix
+			return this.skewY(degToRad(degree)); // TransformMatrix
+		},
+		reflect: function(a, b){
+			// summary:
+			//		forms a reflection matrix
+			// description:
+			//		The resulting matrix is used to reflect points around a vector,
+			//		which goes through the origin.
+			// a: dojox/gfx.Point|Number
+			//		a point-like object, which specifies a vector of reflection, or an X value
+			// b: Number?
+			//		a Y value
+			// returns: TransformMatrix
+			if(arguments.length == 1){
+				b = a.y;
+				a = a.x;
+			}
+			// make a unit vector
+			var a2 = a * a, b2 = b * b, n2 = a2 + b2, 
+				xx=2 * a2 / n2 - 1, 
+				xy = 2 * a * b / n2,
+				yx = xy,
+				yy = 2 * b2 / n2 - 1;
+			return new TransformMatrix(xx,yx,xy, yy); // TransformMatrix
+		},
+		project: function(a, b){
+			// summary:
+			//		forms an orthogonal projection matrix
+			// description:
+			//		The resulting matrix is used to project points orthogonally on a vector,
+			//		which goes through the origin.
+			// a:   Number
+			//		an x coordinate value
+			// b: Number?
+			//		a y coordinate value
+			// returns: TransformMatrix
+
+			// make a unit vector
+			var a2 = a * a, b2 = b * b, n2 = a2 + b2, 
+				xx = a2 / n2,
+				xy = a * b / n2
+				yx = xy,
+				yy = b2 / n2;
+			return new TransformMatrix(xx,yx,xy,yy); // TransformMatrix
+		},
+
+		// common operations
+
+		// high level operations
+
+		_sandwich: function(matrix, x, y){
+			// summary:
+			//		applies a matrix at a central point
+			// matrix: TransformMatrix
+			//		a 2D matrix-like object, which is applied at a central point
+			// x: Number
+			//		an x component of the central point
+			// y: Number
+			//		a y component of the central point
+			return this.translate(x, y).multiply(matrix)
+			                           .multiply(this.translate(-x, -y)); // TransformMatrix
+		},
+		scaleAt: function(a, b, c, d){
+			// summary:
+			//		scales a picture using a specified point as a center of scaling
+			// description:
+			//		Compare with scale().
+			// a: Number
+			//		a scaling factor used for the x coordinate, or a uniform scaling factor used for both coordinates
+			// b: Number?
+			//		a scaling factor used for the y coordinate
+			// c: Number|Point
+			//		an x component of a central point, or a central point
+			// d: Number
+			//		a y component of a central point
+			// returns: TransformMatrix
+			switch(arguments.length){
+				case 4:
+					// a and b are scale factor components, c and d are components of a point
+					return this._sandwich(this.scale(a, b), c, d); // TransformMatrix
+				case 3:
+					if(typeof c == "number"){
+						return this._sandwich(this.scale(a), b, c); // TransformMatrix
+					}
+					return this._sandwich(this.scale(a, b), c.x, c.y); // TransformMatrix
+			}
+			return this._sandwich(this.scale(a), b.x, b.y); // TransformMatrix
+		},
+		rotateAt: function(angle, a, b){
+			// summary:
+			//		rotates a picture using a specified point as a center of rotation
+			// description:
+			//		Compare with rotate().
+			// angle: Number
+			//		an angle of rotation in radians (>0 for CW)
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: TransformMatrix
+			if(arguments.length > 2){
+				return this._sandwich(this.rotate(angle), a, b); // TransformMatrix
+			}
+			return this._sandwich(this.rotate(angle), a.x, a.y); // TransformMatrix
+		},
+		rotategAt: function(degree, a, b){
+			// summary:
+			//		rotates a picture using a specified point as a center of rotation
+			// description:
+			//		Compare with rotateg().
+			// degree: Number
+			//		an angle of rotation in degrees (>0 for CW)
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: TransformMatrix
+			if(arguments.length > 2){
+				return this._sandwich(this.rotateg(degree), a, b); // TransformMatrix
+			}
+			return this._sandwich(this.rotateg(degree), a.x, a.y); // TransformMatrix
+		},
+		skewXAt: function(angle, a, b){
+			// summary:
+			//		skews a picture along the x axis using a specified point as a center of skewing
+			// description:
+			//		Compare with skewX().
+			// angle: Number
+			//		a skewing angle in radians
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: TransformMatrix
+			if(arguments.length > 2){
+				return this._sandwich(this.skewX(angle), a, b); // TransformMatrix
+			}
+			return this._sandwich(this.skewX(angle), a.x, a.y); // TransformMatrix
+		},
+		skewXgAt: function(degree, a, b){
+			// summary:
+			//		skews a picture along the x axis using a specified point as a center of skewing
+			// description:
+			//		Compare with skewXg().
+			// degree: Number
+			//		a skewing angle in degrees
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: TransformMatrix
+			if(arguments.length > 2){
+				return this._sandwich(this.skewXg(degree), a, b); // TransformMatrix
+			}
+			return this._sandwich(this.skewXg(degree), a.x, a.y); // TransformMatrix
+		},
+		skewYAt: function(angle, a, b){
+			// summary:
+			//		skews a picture along the y axis using a specified point as a center of skewing
+			// description:
+			//		Compare with skewY().
+			// angle: Number
+			//		a skewing angle in radians
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: TransformMatrix
+			if(arguments.length > 2){
+				return this._sandwich(this.skewY(angle), a, b); // TransformMatrix
+			}
+			return this._sandwich(this.skewY(angle), a.x, a.y); // TransformMatrix
+		},
+		skewYgAt: function(/* Number */ degree, /* Number||Point */ a, /* Number? */ b){
+			// summary:
+			//		skews a picture along the y axis using a specified point as a center of skewing
+			// description:
+			//		Compare with skewYg().
+			// degree: Number
+			//		a skewing angle in degrees
+			// a: Number|dojox/gfx.Point
+			//		an x component of a central point, or a central point
+			// b: Number?
+			//		a y component of a central point
+			// returns: TransformMatrix
+			if(arguments.length > 2){
+				return this._sandwich(this.skewYg(degree), a, b); // TransformMatrix
+			}
+			return this._sandwich(this.skewYg(degree), a.x, a.y); // TransformMatrix
+		}
+	
+	
+	});
+
+	return numerics.TransformMatrix = TransformMatrix;
+});
+
+define('skylark-langx-numerics/TranslateTransform',[
+    "./numerics",
+    "./Transform",
+    "./MatrixTransform"
+],function(numerics,Transform,Matrix,Point,Rect) {
+
+    //|1   0   dx|
+    //|0   1   dy|
+    //|0   0    1|
+
+   var TranslateTransform =  Transform.inherit({
+        "klassName": "TranslateTransform",
+
+        "value": {
+            get: function() {
+                    return Matrix.scaleAt(this.x, this.y);
+            }
+        },
+
+        "x": {
+            get : function() {
+                return this._.x;
+            }
+        },
+
+        "y": {
+            get : function() {
+                return this._.y;
+            }
+        },
+
+        clone: /*SkewTransform*/ function() {},
+
+        transform: /*Point*/ function( /*Point*/ point) {},
+
+        transformBounds: /*Rect*/ function( /*Rect*/ rect) {},
+
+        "init": function( /*Number*/ x, /*Number*/ y) {
+            var _ = this._;
+
+            _.x = x ? x : 0;
+            _.y = y ? y : 0;
+        }
+    });
+
+    return numerics.TranslateTransform =TranslateTransform;
+});	
+
+define('skylark-langx-numerics/Vector4',[
+	"skylark-langx-klass",
+	"./numerics"
+] ,function(klass,numerics) {
+
+	var Vector4 = klass({
+		"klassName" : "Vector4",
+
+		set: function ( x, y, z, w ) {
+
+			this.x = x;
+			this.y = y;
+			this.z = z;
+			this.w = w;
+
+			return this;
+		},
+
+		setScalar: function ( scalar ) {
+
+			this.x = scalar;
+			this.y = scalar;
+			this.z = scalar;
+			this.w = scalar;
+
+			return this;
+
+		},
+
+		setX: function ( x ) {
+
+			this.x = x;
+
+			return this;
+
+		},
+
+		setY: function ( y ) {
+
+			this.y = y;
+
+			return this;
+
+		},
+
+		setZ: function ( z ) {
+
+			this.z = z;
+
+			return this;
+
+		},
+
+		setW: function ( w ) {
+
+			this.w = w;
+
+			return this;
+
+		},
+
+		setComponent: function ( index, value ) {
+
+			switch ( index ) {
+
+				case 0: this.x = value; break;
+				case 1: this.y = value; break;
+				case 2: this.z = value; break;
+				case 3: this.w = value; break;
+				default: throw new Error( 'index is out of range: ' + index );
+
+			}
+
+			return this;
+		},
+
+		getComponent: function ( index ) {
+
+			switch ( index ) {
+
+				case 0: return this.x;
+				case 1: return this.y;
+				case 2: return this.z;
+				case 3: return this.w;
+				default: throw new Error( 'index is out of range: ' + index );
+
+			}
+
+		},
+
+		clone: function () {
+
+			return new this.constructor( this.x, this.y, this.z, this.w );
+
+		},
+
+		copy: function ( v ) {
+
+			this.x = v.x;
+			this.y = v.y;
+			this.z = v.z;
+			this.w = ( v.w !== undefined ) ? v.w : 1;
+
+			return this;
+
+		},
+
+		add: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'Vector4: .add() now only accepts one argument. Use .addVectors( a, b ) instead.' );
+				return this.addVectors( v, w );
+
+			}
+
+			this.x += v.x;
+			this.y += v.y;
+			this.z += v.z;
+			this.w += v.w;
+
+			return this;
+
+		},
+
+		addScalar: function ( s ) {
+
+			this.x += s;
+			this.y += s;
+			this.z += s;
+			this.w += s;
+
+			return this;
+
+		},
+
+		addVectors: function ( a, b ) {
+
+			this.x = a.x + b.x;
+			this.y = a.y + b.y;
+			this.z = a.z + b.z;
+			this.w = a.w + b.w;
+
+			return this;
+
+		},
+
+		addScaledVector: function ( v, s ) {
+
+			this.x += v.x * s;
+			this.y += v.y * s;
+			this.z += v.z * s;
+			this.w += v.w * s;
+
+			return this;
+
+		},
+
+		sub: function ( v, w ) {
+
+			if ( w !== undefined ) {
+
+				console.warn( 'Vector4: .sub() now only accepts one argument. Use .subVectors( a, b ) instead.' );
+				return this.subVectors( v, w );
+
+			}
+
+			this.x -= v.x;
+			this.y -= v.y;
+			this.z -= v.z;
+			this.w -= v.w;
+
+			return this;
+
+		},
+
+		subScalar: function ( s ) {
+
+			this.x -= s;
+			this.y -= s;
+			this.z -= s;
+			this.w -= s;
+
+			return this;
+
+		},
+
+		subVectors: function ( a, b ) {
+
+			this.x = a.x - b.x;
+			this.y = a.y - b.y;
+			this.z = a.z - b.z;
+			this.w = a.w - b.w;
+
+			return this;
+
+		},
+
+		multiplyScalar: function ( scalar ) {
+
+			this.x *= scalar;
+			this.y *= scalar;
+			this.z *= scalar;
+			this.w *= scalar;
+
+			return this;
+
+		},
+
+		applyMatrix4: function ( m ) {
+
+			var x = this.x, y = this.y, z = this.z, w = this.w;
+			var e = m.elements;
+
+			this.x = e[ 0 ] * x + e[ 4 ] * y + e[ 8 ] * z + e[ 12 ] * w;
+			this.y = e[ 1 ] * x + e[ 5 ] * y + e[ 9 ] * z + e[ 13 ] * w;
+			this.z = e[ 2 ] * x + e[ 6 ] * y + e[ 10 ] * z + e[ 14 ] * w;
+			this.w = e[ 3 ] * x + e[ 7 ] * y + e[ 11 ] * z + e[ 15 ] * w;
+
+			return this;
+
+		},
+
+		divideScalar: function ( scalar ) {
+
+			return this.multiplyScalar( 1 / scalar );
+
+		},
+
+		setAxisAngleFromQuaternion: function ( q ) {
+
+			// http://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToAngle/index.htm
+
+			// q is assumed to be normalized
+
+			this.w = 2 * Math.acos( q.w );
+
+			var s = Math.sqrt( 1 - q.w * q.w );
+
+			if ( s < 0.0001 ) {
+
+				this.x = 1;
+				this.y = 0;
+				this.z = 0;
+
+			} else {
+
+				this.x = q.x / s;
+				this.y = q.y / s;
+				this.z = q.z / s;
+
+			}
+
+			return this;
+
+		},
+
+		setAxisAngleFromRotationMatrix: function ( m ) {
+
+			// http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToAngle/index.htm
+
+			// assumes the upper 3x3 of m is a pure rotation matrix (i.e, unscaled)
+
+			var angle, x, y, z,		// variables for result
+				epsilon = 0.01,		// margin to allow for rounding errors
+				epsilon2 = 0.1,		// margin to distinguish between 0 and 180 degrees
+
+				te = m.elements,
+
+				m11 = te[ 0 ], m12 = te[ 4 ], m13 = te[ 8 ],
+				m21 = te[ 1 ], m22 = te[ 5 ], m23 = te[ 9 ],
+				m31 = te[ 2 ], m32 = te[ 6 ], m33 = te[ 10 ];
+
+			if ( ( Math.abs( m12 - m21 ) < epsilon ) &&
+			     ( Math.abs( m13 - m31 ) < epsilon ) &&
+			     ( Math.abs( m23 - m32 ) < epsilon ) ) {
+
+				// singularity found
+				// first check for identity matrix which must have +1 for all terms
+				// in leading diagonal and zero in other terms
+
+				if ( ( Math.abs( m12 + m21 ) < epsilon2 ) &&
+				     ( Math.abs( m13 + m31 ) < epsilon2 ) &&
+				     ( Math.abs( m23 + m32 ) < epsilon2 ) &&
+				     ( Math.abs( m11 + m22 + m33 - 3 ) < epsilon2 ) ) {
+
+					// this singularity is identity matrix so angle = 0
+
+					this.set( 1, 0, 0, 0 );
+
+					return this; // zero angle, arbitrary axis
+
+				}
+
+				// otherwise this singularity is angle = 180
+
+				angle = Math.PI;
+
+				var xx = ( m11 + 1 ) / 2;
+				var yy = ( m22 + 1 ) / 2;
+				var zz = ( m33 + 1 ) / 2;
+				var xy = ( m12 + m21 ) / 4;
+				var xz = ( m13 + m31 ) / 4;
+				var yz = ( m23 + m32 ) / 4;
+
+				if ( ( xx > yy ) && ( xx > zz ) ) {
+
+					// m11 is the largest diagonal term
+
+					if ( xx < epsilon ) {
+
+						x = 0;
+						y = 0.707106781;
+						z = 0.707106781;
+
+					} else {
+
+						x = Math.sqrt( xx );
+						y = xy / x;
+						z = xz / x;
+
+					}
+
+				} else if ( yy > zz ) {
+
+					// m22 is the largest diagonal term
+
+					if ( yy < epsilon ) {
+
+						x = 0.707106781;
+						y = 0;
+						z = 0.707106781;
+
+					} else {
+
+						y = Math.sqrt( yy );
+						x = xy / y;
+						z = yz / y;
+
+					}
+
+				} else {
+
+					// m33 is the largest diagonal term so base result on this
+
+					if ( zz < epsilon ) {
+
+						x = 0.707106781;
+						y = 0.707106781;
+						z = 0;
+
+					} else {
+
+						z = Math.sqrt( zz );
+						x = xz / z;
+						y = yz / z;
+
+					}
+
+				}
+
+				this.set( x, y, z, angle );
+
+				return this; // return 180 deg rotation
+
+			}
+
+			// as we have reached here there are no singularities so we can handle normally
+
+			var s = Math.sqrt( ( m32 - m23 ) * ( m32 - m23 ) +
+			                   ( m13 - m31 ) * ( m13 - m31 ) +
+			                   ( m21 - m12 ) * ( m21 - m12 ) ); // used to normalize
+
+			if ( Math.abs( s ) < 0.001 ) s = 1;
+
+			// prevent divide by zero, should not happen if matrix is orthogonal and should be
+			// caught by singularity test above, but I've left it in just in case
+
+			this.x = ( m32 - m23 ) / s;
+			this.y = ( m13 - m31 ) / s;
+			this.z = ( m21 - m12 ) / s;
+			this.w = Math.acos( ( m11 + m22 + m33 - 1 ) / 2 );
+
+			return this;
+
+		},
+
+		min: function ( v ) {
+
+			this.x = Math.min( this.x, v.x );
+			this.y = Math.min( this.y, v.y );
+			this.z = Math.min( this.z, v.z );
+			this.w = Math.min( this.w, v.w );
+
+			return this;
+
+		},
+
+		max: function ( v ) {
+
+			this.x = Math.max( this.x, v.x );
+			this.y = Math.max( this.y, v.y );
+			this.z = Math.max( this.z, v.z );
+			this.w = Math.max( this.w, v.w );
+
+			return this;
+
+		},
+
+		clamp: function ( min, max ) {
+
+			// assumes min < max, componentwise
+
+			this.x = Math.max( min.x, Math.min( max.x, this.x ) );
+			this.y = Math.max( min.y, Math.min( max.y, this.y ) );
+			this.z = Math.max( min.z, Math.min( max.z, this.z ) );
+			this.w = Math.max( min.w, Math.min( max.w, this.w ) );
+
+			return this;
+
+		},
+
+		clampScalar: function ( minVal, maxVal ) {
+
+			this.x = Math.max( minVal, Math.min( maxVal, this.x ) );
+			this.y = Math.max( minVal, Math.min( maxVal, this.y ) );
+			this.z = Math.max( minVal, Math.min( maxVal, this.z ) );
+			this.w = Math.max( minVal, Math.min( maxVal, this.w ) );
+
+			return this;
+
+		},
+
+		clampLength: function ( min, max ) {
+
+			var length = this.length();
+
+			return this.divideScalar( length || 1 ).multiplyScalar( Math.max( min, Math.min( max, length ) ) );
+
+		},
+
+		floor: function () {
+
+			this.x = Math.floor( this.x );
+			this.y = Math.floor( this.y );
+			this.z = Math.floor( this.z );
+			this.w = Math.floor( this.w );
+
+			return this;
+
+		},
+
+		ceil: function () {
+
+			this.x = Math.ceil( this.x );
+			this.y = Math.ceil( this.y );
+			this.z = Math.ceil( this.z );
+			this.w = Math.ceil( this.w );
+
+			return this;
+
+		},
+
+		round: function () {
+
+			this.x = Math.round( this.x );
+			this.y = Math.round( this.y );
+			this.z = Math.round( this.z );
+			this.w = Math.round( this.w );
+
+			return this;
+
+		},
+
+		roundToZero: function () {
+
+			this.x = ( this.x < 0 ) ? Math.ceil( this.x ) : Math.floor( this.x );
+			this.y = ( this.y < 0 ) ? Math.ceil( this.y ) : Math.floor( this.y );
+			this.z = ( this.z < 0 ) ? Math.ceil( this.z ) : Math.floor( this.z );
+			this.w = ( this.w < 0 ) ? Math.ceil( this.w ) : Math.floor( this.w );
+
+			return this;
+
+		},
+
+		negate: function () {
+
+			this.x = - this.x;
+			this.y = - this.y;
+			this.z = - this.z;
+			this.w = - this.w;
+
+			return this;
+
+		},
+
+		dot: function ( v ) {
+
+			return this.x * v.x + this.y * v.y + this.z * v.z + this.w * v.w;
+
+		},
+
+		lengthSq: function () {
+
+			return this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w;
+
+		},
+
+		length: function () {
+
+			return Math.sqrt( this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w );
+
+		},
+
+		manhattanLength: function () {
+
+			return Math.abs( this.x ) + Math.abs( this.y ) + Math.abs( this.z ) + Math.abs( this.w );
+
+		},
+
+		normalize: function () {
+
+			return this.divideScalar( this.length() || 1 );
+
+		},
+
+		setLength: function ( length ) {
+
+			return this.normalize().multiplyScalar( length );
+
+		},
+
+		lerp: function ( v, alpha ) {
+
+			this.x += ( v.x - this.x ) * alpha;
+			this.y += ( v.y - this.y ) * alpha;
+			this.z += ( v.z - this.z ) * alpha;
+			this.w += ( v.w - this.w ) * alpha;
+
+			return this;
+
+		},
+
+		lerpVectors: function ( v1, v2, alpha ) {
+
+			return this.subVectors( v2, v1 ).multiplyScalar( alpha ).add( v1 );
+
+		},
+
+		equals: function ( v ) {
+
+			return ( ( v.x === this.x ) && ( v.y === this.y ) && ( v.z === this.z ) && ( v.w === this.w ) );
+
+		},
+
+		fromArray: function ( array, offset ) {
+
+			if ( offset === undefined ) offset = 0;
+
+			this.x = array[ offset ];
+			this.y = array[ offset + 1 ];
+			this.z = array[ offset + 2 ];
+			this.w = array[ offset + 3 ];
+
+			return this;
+
+		},
+
+		toArray: function ( array, offset ) {
+
+			if ( array === undefined ) array = [];
+			if ( offset === undefined ) offset = 0;
+
+			array[ offset ] = this.x;
+			array[ offset + 1 ] = this.y;
+			array[ offset + 2 ] = this.z;
+			array[ offset + 3 ] = this.w;
+
+			return array;
+
+		},
+
+		fromBufferAttribute: function ( attribute, index, offset ) {
+
+			if ( offset !== undefined ) {
+
+				console.warn( 'Vector4: offset has been removed from .fromBufferAttribute().' );
+
+			}
+
+			this.x = attribute.getX( index );
+			this.y = attribute.getY( index );
+			this.z = attribute.getZ( index );
+			this.w = attribute.getW( index );
+
+			return this;
+
+		},
+
+
+		"_construct" :function ( x, y, z, w ) {
+
+			this.x = x || 0;
+			this.y = y || 0;
+			this.z = z || 0;
+			this.w = ( w !== undefined ) ? w : 1;
+
+		}
+
+	});
+
+/*
+	Object.defineProperties( Vector4.prototype, {
+
+		"width": {
+
+			get: function () {
+
+				return this.z;
+
+			},
+
+			set: function ( value ) {
+
+				this.z = value;
+
+			}
+
+		},
+
+		"height": {
+
+			get: function () {
+
+				return this.w;
+
+			},
+
+			set: function ( value ) {
+
+				this.w = value;
+
+			}
+
+		}
+
+	} );
+*/
+
+	return numerics.Vector4 = Vector4 ;
+
+});
+define('skylark-langx-numerics/main',[
+	"./numerics",
+	"./Euler",
+	"./maths",
+	"./Matrix3",
+	"./Matrix4",
+	"./MatrixTransform",
+	"./Plane",
+	"./Quaternion",
+	"./RotateTransform",
+	"./ScaleTransform",
+	"./SkewTransform",
+	"./Transform",
+	"./TransformMatrix",
+	"./TranslateTransform",
+	"./Vector2",
+	"./Vector3",
+	"./Vector4"
+],function(numerics){
+	return numerics;
+});
+define('skylark-langx-numerics', ['skylark-langx-numerics/main'], function (main) { return main; });
+
+define('skylark-langx/numerics',[
+	"skylark-langx-numerics"
+],function(numerics){
+	return numerics;
+});
+define('skylark-langx/objects',[
+    "skylark-langx-objects"
+],function(objects){
+    return objects;
+});
+define('skylark-langx-strings/strings',[
+    "skylark-langx-ns"
+],function(skylark){
+    // add default escape function for escaping HTML entities
+    var escapeCharMap = Object.freeze({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#x27;',
+        '`': '&#x60;',
+        '=': '&#x3D;',
+    });
+    function replaceChar(c) {
+        return escapeCharMap[c];
+    }
+    var escapeChars = /[&<>"'`=]/g;
+
 
      /*
      * Converts camel case into dashes.
@@ -2669,10 +9575,29 @@ define('skylark-langx/strings',[
         }
     }
 
+    function escapeHTML(str) {
+        if (str == null) {
+            return '';
+        }
+        if (!str) {
+            return String(str);
+        }
+
+        return str.toString().replace(escapeChars, replaceChar);
+    }
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0;
+            var v = c === 'x' ? r : ((r & 0x3) | 0x8);
+            return v.toString(16);
+        });
+    }
 
     function trim(str) {
         return str == null ? "" : String.prototype.trim.call(str);
     }
+
     function substitute( /*String*/ template,
         /*Object|Array*/
         map,
@@ -2732,7 +9657,130 @@ define('skylark-langx/strings',[
         return prefix ? prefix + id : id;
     }
 
-	return {
+
+    /**
+     * https://github.com/cho45/micro-template.js
+     * (c) cho45 http://cho45.github.com/mit-license
+     */
+    function template (id, data) {
+
+        function include(name, args) {
+            var stash = {};
+            for (var key in template.context.stash) if (template.context.stash.hasOwnProperty(key)) {
+                stash[key] = template.context.stash[key];
+            }
+            if (args) for (var key in args) if (args.hasOwnProperty(key)) {
+                stash[key] = args[key];
+            }
+            var context = template.context;
+            context.ret += template(name, stash);
+            template.context = context;
+        }
+
+        function wrapper(name, fun) {
+            var current = template.context.ret;
+            template.context.ret = '';
+            fun.apply(template.context);
+            var content = template.context.ret;
+            var orig_content = template.context.stash.content;
+            template.context.stash.content = content;
+            template.context.ret = current + template(name, template.context.stash);
+            template.context.stash.content = orig_content;
+        }
+
+        var me = arguments.callee;
+        if (!me.cache[id]) me.cache[id] = (function () {
+            var name = id, string = /^[\w\-]+$/.test(id) ? me.get(id): (name = 'template(string)', id); // no warnings
+            var line = 1, body = (
+                "try { " +
+                    (me.variable ?  "var " + me.variable + " = this.stash;" : "with (this.stash) { ") +
+                        "this.ret += '"  +
+                        string.
+                            replace(/<%/g, '\x11').replace(/%>/g, '\x13'). // if you want other tag, just edit this line
+                            replace(/'(?![^\x11\x13]+?\x13)/g, '\\x27').
+                            replace(/^\s*|\s*$/g, '').
+                            replace(/\n|\r\n/g, function () { return "';\nthis.line = " + (++line) + "; this.ret += '\\n" }).
+                            replace(/\x11=raw(.+?)\x13/g, "' + ($1) + '").
+                            replace(/\x11=(.+?)\x13/g, "' + this.escapeHTML($1) + '").
+                            replace(/\x11(.+?)\x13/g, "'; $1; this.ret += '") +
+                    "'; " + (me.variable ? "" : "}") + "return this.ret;" +
+                "} catch (e) { throw 'TemplateError: ' + e + ' (on " + name + "' + ' line ' + this.line + ')'; } " +
+                "//@ sourceURL=" + name + "\n" // source map
+            ).replace(/this\.ret \+= '';/g, '');
+            var func = new Function(body);
+            var map  = { '&' : '&amp;', '<' : '&lt;', '>' : '&gt;', '\x22' : '&#x22;', '\x27' : '&#x27;' };
+            var escapeHTML = function (string) { return (''+string).replace(/[&<>\'\"]/g, function (_) { return map[_] }) };
+            return function (stash) { return func.call(me.context = { escapeHTML: escapeHTML, line: 1, ret : '', stash: stash }) };
+        })();
+        return data ? me.cache[id](data) : me.cache[id];
+    }
+
+    template.cache = {};
+    
+
+    template.get = function (id) {
+        return document.getElementById(id).innerHTML;
+    };
+
+
+    function ltrim(str) {
+        return str.replace(/^\s+/, '');
+    }
+    
+    function rtrim(str) {
+        return str.replace(/\s+$/, '');
+    }
+
+    // Slugify a string
+    function slugify(str) {
+        str = str.replace(/^\s+|\s+$/g, '');
+
+        // Make the string lowercase
+        str = str.toLowerCase();
+
+        // Remove accents, swap ñ for n, etc
+        var from = "ÁÄÂÀÃÅČÇĆĎÉĚËÈÊẼĔȆÍÌÎÏŇÑÓÖÒÔÕØŘŔŠŤÚŮÜÙÛÝŸŽáäâàãåčçćďéěëèêẽĕȇíìîïňñóöòôõøðřŕšťúůüùûýÿžþÞĐđßÆa·/_,:;";
+        var to   = "AAAAAACCCDEEEEEEEEIIIINNOOOOOORRSTUUUUUYYZaaaaaacccdeeeeeeeeiiiinnooooooorrstuuuuuyyzbBDdBAa------";
+        for (var i=0, l=from.length ; i<l ; i++) {
+            str = str.replace(new RegExp(from.charAt(i), 'g'), to.charAt(i));
+        }
+
+        // Remove invalid chars
+        //str = str.replace(/[^a-z0-9 -]/g, '') 
+        // Collapse whitespace and replace by -
+        str = str.replace(/\s+/g, '-') 
+        // Collapse dashes
+        .replace(/-+/g, '-'); 
+
+        return str;
+    }    
+
+    // return boolean if string 'true' or string 'false', or if a parsable string which is a number
+    // also supports JSON object and/or arrays parsing
+    function toType(str) {
+        var type = typeof str;
+        if (type !== 'string') {
+            return str;
+        }
+        var nb = parseFloat(str);
+        if (!isNaN(nb) && isFinite(str)) {
+            return nb;
+        }
+        if (str === 'false') {
+            return false;
+        }
+        if (str === 'true') {
+            return true;
+        }
+
+        try {
+            str = JSON.parse(str);
+        } catch (e) {}
+
+        return str;
+    }
+
+	return skylark.attach("langx.strings",{
         camelCase: function(str) {
             return str.replace(/-([\da-z])/g, function(a) {
                 return a.toUpperCase().replace('-', '');
@@ -2743,9 +9791,17 @@ define('skylark-langx/strings',[
 
         deserializeValue: deserializeValue,
 
+        escapeHTML : escapeHTML,
+
+        generateUUID : generateUUID,
+
+        ltrim : ltrim,
+
         lowerFirst: function(str) {
             return str.charAt(0).toLowerCase() + str.slice(1);
         },
+
+        rtrim : rtrim,
 
         serializeValue: function(value) {
             return JSON.stringify(value)
@@ -2754,6 +9810,10 @@ define('skylark-langx/strings',[
 
         substitute: substitute,
 
+        slugify : slugify,
+
+        //template : template,
+
         trim: trim,
 
         uniqueId: uniqueId,
@@ -2761,486 +9821,171 @@ define('skylark-langx/strings',[
         upperFirst: function(str) {
             return str.charAt(0).toUpperCase() + str.slice(1);
         }
-	} ; 
+	}) ; 
 
 });
-define('skylark-langx/Xhr',[
-    "./arrays",
-    "./Deferred",
-    "./Evented",
-    "./objects",
-    "./funcs",
-    "./types"
-],function(arrays,Deferred,Evented,objects,funcs,types){
-    var each = objects.each,
-        mixin = objects.mixin,
-        noop = funcs.noop,
-        isArray = types.isArray,
-        isFunction = types.isFunction,
-        isPlainObject = types.isPlainObject,
-        type = types.type;
- 
-     var getAbsoluteUrl = (function() {
-        var a;
+define('skylark-langx-strings/base64',[
+	"./strings"
+],function(strings) {
 
-        return function(url) {
-            if (!a) a = document.createElement('a');
-            a.href = url;
+	// private property
+	const _keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
-            return a.href;
-        };
-    })();
-   
-    var Xhr = (function(){
-        var jsonpID = 0,
-            key,
-            name,
-            rscript = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-            scriptTypeRE = /^(?:text|application)\/javascript/i,
-            xmlTypeRE = /^(?:text|application)\/xml/i,
-            jsonType = 'application/json',
-            htmlType = 'text/html',
-            blankRE = /^\s*$/;
+	// private method for UTF-8 encoding
+	function _utf8_encode(string) {
+		string = string.replace(/\r\n/g,"\n");
+		var utftext = "";
 
-        var XhrDefaultOptions = {
-            async: true,
+		for (var n = 0; n < string.length; n++) {
 
-            // Default type of request
-            type: 'GET',
-            // Callback that is executed before request
-            beforeSend: noop,
-            // Callback that is executed if the request succeeds
-            success: noop,
-            // Callback that is executed the the server drops error
-            error: noop,
-            // Callback that is executed on request complete (both: error and success)
-            complete: noop,
-            // The context for the callbacks
-            context: null,
-            // Whether to trigger "global" Ajax events
-            global: true,
+			var c = string.charCodeAt(n);
 
-            // MIME types mapping
-            // IIS returns Javascript as "application/x-javascript"
-            accepts: {
-                script: 'text/javascript, application/javascript, application/x-javascript',
-                json: 'application/json',
-                xml: 'application/xml, text/xml',
-                html: 'text/html',
-                text: 'text/plain'
-            },
-            // Whether the request is to another domain
-            crossDomain: false,
-            // Default timeout
-            timeout: 0,
-            // Whether data should be serialized to string
-            processData: true,
-            // Whether the browser should be allowed to cache GET responses
-            cache: true,
+			if (c < 128) {
+				utftext += String.fromCharCode(c);
+			}
+			else if((c > 127) && (c < 2048)) {
+				utftext += String.fromCharCode((c >> 6) | 192);
+				utftext += String.fromCharCode((c & 63) | 128);
+			}
+			else {
+				utftext += String.fromCharCode((c >> 12) | 224);
+				utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+				utftext += String.fromCharCode((c & 63) | 128);
+			}
 
-            xhrFields : {
-                withCredentials : true
-            }
-        };
+		}
 
-        function mimeToDataType(mime) {
-            if (mime) {
-                mime = mime.split(';', 2)[0];
-            }
-            if (mime) {
-                if (mime == htmlType) {
-                    return "html";
-                } else if (mime == jsonType) {
-                    return "json";
-                } else if (scriptTypeRE.test(mime)) {
-                    return "script";
-                } else if (xmlTypeRE.test(mime)) {
-                    return "xml";
-                }
-            }
-            return "text";
-        }
+		return utftext;
+	}
 
-        function appendQuery(url, query) {
-            if (query == '') return url
-            return (url + '&' + query).replace(/[&?]{1,2}/, '?')
-        }
+	// private method for UTF-8 decoding
+	function _utf8_decode(utftext) {
+		var string = "";
+		var i = 0;
+		var c = c1 = c2 = 0;
 
-        // serialize payload and append it to the URL for GET requests
-        function serializeData(options) {
-            options.data = options.data || options.query;
-            if (options.processData && options.data && type(options.data) != "string") {
-                options.data = param(options.data, options.traditional);
-            }
-            if (options.data && (!options.type || options.type.toUpperCase() == 'GET')) {
-                options.url = appendQuery(options.url, options.data);
-                options.data = undefined;
-            }
-        }
+		while ( i < utftext.length ) {
 
-        function serialize(params, obj, traditional, scope) {
-            var t, array = isArray(obj),
-                hash = isPlainObject(obj)
-            each(obj, function(key, value) {
-                t =type(value);
-                if (scope) key = traditional ? scope :
-                    scope + '[' + (hash || t == 'object' || t == 'array' ? key : '') + ']'
-                // handle data in serializeArray() format
-                if (!scope && array) params.add(value.name, value.value)
-                // recurse into nested objects
-                else if (t == "array" || (!traditional && t == "object"))
-                    serialize(params, value, traditional, key)
-                else params.add(key, value)
-            })
-        }
+			c = utftext.charCodeAt(i);
 
-        var param = function(obj, traditional) {
-            var params = []
-            params.add = function(key, value) {
-                if (isFunction(value)) value = value()
-                if (value == null) value = ""
-                this.push(escape(key) + '=' + escape(value))
-            }
-            serialize(params, obj, traditional)
-            return params.join('&').replace(/%20/g, '+')
-        };
+			if (c < 128) {
+				string += String.fromCharCode(c);
+				i++;
+			}
+			else if((c > 191) && (c < 224)) {
+				c2 = utftext.charCodeAt(i+1);
+				string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+				i += 2;
+			}
+			else {
+				c2 = utftext.charCodeAt(i+1);
+				c3 = utftext.charCodeAt(i+2);
+				string += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+				i += 3;
+			}
 
-        var Xhr = Evented.inherit({
-            klassName : "Xhr",
+		}
 
-            _request  : function(args) {
-                var _ = this._,
-                    self = this,
-                    options = mixin({},XhrDefaultOptions,_.options,args),
-                    xhr = _.xhr = new XMLHttpRequest();
+		return string;
+	}
 
-                serializeData(options)
+	// public method for encoding
+	function encode(input, binary) {
+		binary = (binary != null) ? binary : false;
+		var output = "";
+		var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+		var i = 0;
 
-                var dataType = options.dataType || options.handleAs,
-                    mime = options.mimeType || options.accepts[dataType],
-                    headers = options.headers,
-                    xhrFields = options.xhrFields,
-                    isFormData = options.data && options.data instanceof FormData,
-                    basicAuthorizationToken = options.basicAuthorizationToken,
-                    type = options.type,
-                    url = options.url,
-                    async = options.async,
-                    user = options.user , 
-                    password = options.password,
-                    deferred = new Deferred(),
-                    contentType = isFormData ? false : 'application/x-www-form-urlencoded';
+		if (!binary)
+		{
+			input = _utf8_encode(input);
+		}
 
-                if (xhrFields) {
-                    for (name in xhrFields) {
-                        xhr[name] = xhrFields[name];
-                    }
-                }
+		while (i < input.length) {
 
-                if (mime && mime.indexOf(',') > -1) {
-                    mime = mime.split(',', 2)[0];
-                }
-                if (mime && xhr.overrideMimeType) {
-                    xhr.overrideMimeType(mime);
-                }
+			chr1 = input.charCodeAt(i++);
+			chr2 = input.charCodeAt(i++);
+			chr3 = input.charCodeAt(i++);
 
-                //if (dataType) {
-                //    xhr.responseType = dataType;
-                //}
+			enc1 = chr1 >> 2;
+			enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+			enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+			enc4 = chr3 & 63;
 
-                var finish = function() {
-                    xhr.onloadend = noop;
-                    xhr.onabort = noop;
-                    xhr.onprogress = noop;
-                    xhr.ontimeout = noop;
-                    xhr = null;
-                }
-                var onloadend = function() {
-                    var result, error = false
-                    if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304 || (xhr.status == 0 && getAbsoluteUrl(url).startsWith('file:'))) {
-                        dataType = dataType || mimeToDataType(options.mimeType || xhr.getResponseHeader('content-type'));
+			if (isNaN(chr2)) {
+				enc3 = enc4 = 64;
+			} else if (isNaN(chr3)) {
+				enc4 = 64;
+			}
 
-                        result = xhr.responseText;
-                        try {
-                            if (dataType == 'script') {
-                                eval(result);
-                            } else if (dataType == 'xml') {
-                                result = xhr.responseXML;
-                            } else if (dataType == 'json') {
-                                result = blankRE.test(result) ? null : JSON.parse(result);
-                            } else if (dataType == "blob") {
-                                result = Blob([xhrObj.response]);
-                            } else if (dataType == "arraybuffer") {
-                                result = xhr.reponse;
-                            }
-                        } catch (e) { 
-                            error = e;
-                        }
+			output = output +
+			this._keyStr.charAt(enc1) + this._keyStr.charAt(enc2) +
+			this._keyStr.charAt(enc3) + this._keyStr.charAt(enc4);
 
-                        if (error) {
-                            deferred.reject(error,xhr.status,xhr);
-                        } else {
-                            deferred.resolve(result,xhr.status,xhr);
-                        }
-                    } else {
-                        deferred.reject(new Error(xhr.statusText),xhr.status,xhr);
-                    }
-                    finish();
-                };
+		}
 
-                var onabort = function() {
-                    if (deferred) {
-                        deferred.reject(new Error("abort"),xhr.status,xhr);
-                    }
-                    finish();                 
-                }
- 
-                var ontimeout = function() {
-                    if (deferred) {
-                        deferred.reject(new Error("timeout"),xhr.status,xhr);
-                    }
-                    finish();                 
-                }
+		return output;
+	}
 
-                var onprogress = function(evt) {
-                    if (deferred) {
-                        deferred.notify(evt,xhr.status,xhr);
-                    }
-                }
+	// public method for decoding
+	function decode(input, binary) {
+		binary = (binary != null) ? binary : false;
+		var output = "";
+		var chr1, chr2, chr3;
+		var enc1, enc2, enc3, enc4;
+		var i = 0;
 
-                xhr.onloadend = onloadend;
-                xhr.onabort = onabort;
-                xhr.ontimeout = ontimeout;
-                xhr.onprogress = onprogress;
+		input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
 
-                xhr.open(type, url, async, user, password);
-               
-                if (headers) {
-                    for ( var key in headers) {
-                        var value = headers[key];
- 
-                        if(key.toLowerCase() === 'content-type'){
-                            contentType = headers[hdr];
-                        } else {
-                           xhr.setRequestHeader(key, value);
-                        }
-                    }
-                }   
+		while (i < input.length) {
 
-                if  (contentType && contentType !== false){
-                    xhr.setRequestHeader('Content-Type', contentType);
-                }
+			enc1 = this._keyStr.indexOf(input.charAt(i++));
+			enc2 = this._keyStr.indexOf(input.charAt(i++));
+			enc3 = this._keyStr.indexOf(input.charAt(i++));
+			enc4 = this._keyStr.indexOf(input.charAt(i++));
 
-                if(!headers || !('X-Requested-With' in headers)){
-                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                }
+			chr1 = (enc1 << 2) | (enc2 >> 4);
+			chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+			chr3 = ((enc3 & 3) << 6) | enc4;
+
+			output = output + String.fromCharCode(chr1);
+
+			if (enc3 != 64) {
+				output = output + String.fromCharCode(chr2);
+			}
+			if (enc4 != 64) {
+				output = output + String.fromCharCode(chr3);
+			}
+
+		}
+
+		if (!binary) {
+			output = _utf8_decode(output);
+		}
+
+		return output;
+
+	}
 
 
-                //If basicAuthorizationToken is defined set its value into "Authorization" header
-                if (basicAuthorizationToken) {
-                    xhr.setRequestHeader("Authorization", basicAuthorizationToken);
-                }
-
-                xhr.send(options.data ? options.data : null);
-
-                return deferred.promise;
-
-            },
-
-            "abort": function() {
-                var _ = this._,
-                    xhr = _.xhr;
-
-                if (xhr) {
-                    xhr.abort();
-                }    
-            },
-
-
-            "request": function(args) {
-                return this._request(args);
-            },
-
-            get : function(args) {
-                args = args || {};
-                args.type = "GET";
-                return this._request(args);
-            },
-
-            post : function(args) {
-                args = args || {};
-                args.type = "POST";
-                return this._request(args);
-            },
-
-            patch : function(args) {
-                args = args || {};
-                args.type = "PATCH";
-                return this._request(args);
-            },
-
-            put : function(args) {
-                args = args || {};
-                args.type = "PUT";
-                return this._request(args);
-            },
-
-            del : function(args) {
-                args = args || {};
-                args.type = "DELETE";
-                return this._request(args);
-            },
-
-            "init": function(options) {
-                this._ = {
-                    options : options || {}
-                };
-            }
-        });
-
-        ["request","get","post","put","del","patch"].forEach(function(name){
-            Xhr[name] = function(url,args) {
-                var xhr = new Xhr({"url" : url});
-                return xhr[name](args);
-            };
-        });
-
-        Xhr.defaultOptions = XhrDefaultOptions;
-        Xhr.param = param;
-
-        return Xhr;
-    })();
-
-	return Xhr;	
+	return strings.base64 = {
+		decode,
+		encode
+	};
+	
 });
-define('skylark-langx/Restful',[
-    "./Evented",
-    "./objects",
-    "./strings",
-    "./Xhr"
-],function(Evented,objects,strings,Xhr){
-    var mixin = objects.mixin,
-        substitute = strings.substitute;
+define('skylark-langx-strings/main',[
+	"./strings",
+	"./base64"
+],function(strings){
+	return strings;
+});
+define('skylark-langx-strings', ['skylark-langx-strings/main'], function (main) { return main; });
 
-    var Restful = Evented.inherit({
-        "klassName" : "Restful",
-
-        "idAttribute": "id",
-        
-        getBaseUrl : function(args) {
-            //$$baseEndpoint : "/files/${fileId}/comments",
-            var baseEndpoint = substitute(this.baseEndpoint,args),
-                baseUrl = this.server + this.basePath + baseEndpoint;
-            if (args[this.idAttribute]!==undefined) {
-                baseUrl = baseUrl + "/" + args[this.idAttribute]; 
-            }
-            return baseUrl;
-        },
-        _head : function(args) {
-            //get resource metadata .
-            //args : id and other info for the resource ,ex
-            //{
-            //  "id" : 234,  // the own id, required
-            //  "fileId"   : 2 // the parent resource id, option by resource
-            //}
-        },
-        _get : function(args) {
-            //get resource ,one or list .
-            //args : id and other info for the resource ,ex
-            //{
-            //  "id" : 234,  // the own id, null if list
-            //  "fileId"   : 2 // the parent resource id, option by resource
-            //}
-            return Xhr.get(this.getBaseUrl(args),args);
-        },
-        _post  : function(args,verb) {
-            //create or move resource .
-            //args : id and other info for the resource ,ex
-            //{
-            //  "id" : 234,  // the own id, required
-            //  "data" : body // the own data,required
-            //  "fileId"   : 2 // the parent resource id, option by resource
-            //}
-            //verb : the verb ,ex: copy,touch,trash,untrash,watch
-            var url = this.getBaseUrl(args);
-            if (verb) {
-                url = url + "/" + verb;
-            }
-            return Xhr.post(url, args);
-        },
-
-        _put  : function(args,verb) {
-            //update resource .
-            //args : id and other info for the resource ,ex
-            //{
-            //  "id" : 234,  // the own id, required
-            //  "data" : body // the own data,required
-            //  "fileId"   : 2 // the parent resource id, option by resource
-            //}
-            //verb : the verb ,ex: copy,touch,trash,untrash,watch
-            var url = this.getBaseUrl(args);
-            if (verb) {
-                url = url + "/" + verb;
-            }
-            return Xhr.put(url, args);
-        },
-
-        _delete : function(args) {
-            //delete resource . 
-            //args : id and other info for the resource ,ex
-            //{
-            //  "id" : 234,  // the own id, required
-            //  "fileId"   : 2 // the parent resource id, option by resource
-            //}         
-
-            // HTTP request : DELETE http://center.utilhub.com/registry/v1/apps/{appid}
-            var url = this.getBaseUrl(args);
-            return Xhr.del(url);
-        },
-
-        _patch : function(args){
-            //update resource metadata. 
-            //args : id and other info for the resource ,ex
-            //{
-            //  "id" : 234,  // the own id, required
-            //  "data" : body // the own data,required
-            //  "fileId"   : 2 // the parent resource id, option by resource
-            //}
-            var url = this.getBaseUrl(args);
-            return Xhr.patch(url, args);
-        },
-        query: function(params) {
-            
-            return this._post(params);
-        },
-
-        retrieve: function(params) {
-            return this._get(params);
-        },
-
-        create: function(params) {
-            return this._post(params);
-        },
-
-        update: function(params) {
-            return this._put(params);
-        },
-
-        delete: function(params) {
-            // HTTP request : DELETE http://center.utilhub.com/registry/v1/apps/{appid}
-            return this._delete(params);
-        },
-
-        patch: function(params) {
-           // HTTP request : PATCH http://center.utilhub.com/registry/v1/apps/{appid}
-            return this._patch(params);
-        },
-        init: function(params) {
-            mixin(this,params);
- //           this._xhr = XHRx();
-       }
-    });
-
-    return Restful;
+define('skylark-langx/strings',[
+    "skylark-langx-strings"
+],function(strings){
+    return strings;
 });
 define('skylark-langx/Stateful',[
 	"./Evented",
@@ -3454,12 +10199,13 @@ define('skylark-langx/Stateful',[
 
 	return Stateful;
 });
-define('skylark-langx/topic',[
-	"./Evented"
-],function(Evented){
-	var hub = new Evented();
+define('skylark-langx-topic/topic',[
+	"skylark-langx-ns",
+	"skylark-langx-events"
+],function(skylark,events){
+	var hub = new events.Emitter();
 
-	return {
+	return skylark.attach("langx.topic",{
 	    publish: function(name, arg1,argn) {
 	        var data = [].slice.call(arguments, 1);
 
@@ -3482,7 +10228,24 @@ define('skylark-langx/topic',[
 
         }
 
-	}
+	});
+});
+define('skylark-langx-topic/main',[
+	"./topic"
+],function(topic){
+	return topic;
+});
+define('skylark-langx-topic', ['skylark-langx-topic/main'], function (main) { return main; });
+
+define('skylark-langx/topic',[
+	"skylark-langx-topic"
+],function(topic){
+	return topic;
+});
+define('skylark-langx/types',[
+    "skylark-langx-types"
+],function(types){
+    return types;
 });
 define('skylark-langx/langx',[
     "./skylark",
@@ -3490,21 +10253,45 @@ define('skylark-langx/langx',[
     "./ArrayStore",
     "./aspect",
     "./async",
+    "./binary",
     "./datetimes",
     "./Deferred",
+    "./Emitter",
     "./Evented",
+    "./events",
     "./funcs",
     "./hoster",
     "./klass",
-    "./numbers",
+    "./maths",
+    "./numerics",
     "./objects",
-    "./Restful",
     "./Stateful",
     "./strings",
     "./topic",
-    "./types",
-    "./Xhr"
-], function(skylark,arrays,ArrayStore,aspect,async,datetimes,Deferred,Evented,funcs,hoster,klass,numbers,objects,Restful,Stateful,strings,topic,types,Xhr) {
+    "./types"
+], function(
+    skylark,
+    arrays,
+    ArrayStore,
+    aspect,
+    async,
+    binary,
+    datetimes,
+    Deferred,
+    Emitter,
+    Evented,
+    events,
+    funcs,
+    hoster,
+    klass,
+    maths,
+    numerics,
+    objects,
+    Stateful,
+    strings,
+    topic,
+    types
+) {
     "use strict";
     var toString = {}.toString,
         concat = Array.prototype.concat,
@@ -3515,13 +10302,6 @@ define('skylark-langx/langx',[
         safeMixin = objects.safeMixin,
         isFunction = types.isFunction;
 
-
-    function createEvent(type, props) {
-        var e = new CustomEvent(type, props);
-
-        return safeMixin(e, props);
-    }
-    
 
     function funcArg(context, arg, idx, payload) {
         return isFunction(arg) ? arg.call(context, idx, payload) : arg;
@@ -3560,7 +10340,7 @@ define('skylark-langx/langx',[
     }
 
     mixin(langx, {
-        createEvent : createEvent,
+        createEvent : Emitter.createEvent,
 
         funcArg: funcArg,
 
@@ -3575,49 +10355,32 @@ define('skylark-langx/langx',[
     });
 
 
-    mixin(langx, arrays,aspect,datetimes,funcs,numbers,objects,strings,types,{
+    mixin(langx, arrays,aspect,datetimes,funcs,numerics,objects,strings,types,{
         ArrayStore : ArrayStore,
 
         async : async,
         
         Deferred: Deferred,
 
+        Emitter: Emitter,
+
         Evented: Evented,
 
         hoster : hoster,
 
         klass : klass,
-
-        Restful: Restful,
-        
+       
         Stateful: Stateful,
 
-        topic : topic,
-
-        Xhr: Xhr
-
+        topic : topic
     });
 
     return skylark.langx = langx;
 });
-define('skylark-utils-dom/skylark',["skylark-langx/skylark"], function(skylark) {
-    return skylark;
-});
-
-define('skylark-utils-dom/dom',["./skylark"], function(skylark) {
-	return skylark.dom = {};
-});
-
-define('skylark-utils-dom/langx',[
+define('skylark-domx-browser/browser',[
+    "skylark-langx/skylark",
     "skylark-langx/langx"
-], function(langx) {
-    return langx;
-});
-
-define('skylark-utils-dom/browser',[
-    "./dom",
-    "./langx"
-], function(dom,langx) {
+], function(skylark,langx) {
     "use strict";
 
     var browser = langx.hoster.browser;
@@ -3738,284 +10501,29 @@ define('skylark-utils-dom/browser',[
         };
     }
 
+    browser.support.cssPointerEvents =  (function() {
+        testEl.style.cssText = 'pointer-events:auto';
+        return testEl.style.pointerEvents === 'auto';
+    })(),
+
+
     testEl = null;
 
-    return dom.browser = browser;
+    return skylark.attach("domx.browser",browser);
 });
 
-define('skylark-utils-dom/styler',[
-    "./dom",
-    "./langx"
-], function(dom, langx) {
-    var every = Array.prototype.every,
-        forEach = Array.prototype.forEach,
-        camelCase = langx.camelCase,
-        dasherize = langx.dasherize;
-
-    function maybeAddPx(name, value) {
-        return (typeof value == "number" && !cssNumber[dasherize(name)]) ? value + "px" : value
-    }
-
-    var cssNumber = {
-            'column-count': 1,
-            'columns': 1,
-            'font-weight': 1,
-            'line-height': 1,
-            'opacity': 1,
-            'z-index': 1,
-            'zoom': 1
-        },
-        classReCache = {
-
-        };
-
-    function classRE(name) {
-        return name in classReCache ?
-            classReCache[name] : (classReCache[name] = new RegExp('(^|\\s)' + name + '(\\s|$)'));
-    }
-
-    // access className property while respecting SVGAnimatedString
-    /*
-     * Adds the specified class(es) to each element in the set of matched elements.
-     * @param {HTMLElement} node
-     * @param {String} value
-     */
-    function className(node, value) {
-        var klass = node.className || '',
-            svg = klass && klass.baseVal !== undefined
-
-        if (value === undefined) return svg ? klass.baseVal : klass
-        svg ? (klass.baseVal = value) : (node.className = value)
-    }
-
-    function disabled(elm, value ) {
-        if (arguments.length < 2) {
-            return !!this.dom.disabled;
-        }
-
-        elm.disabled = value;
-
-        return this;
-    }
-
-    var elementDisplay = {};
-
-    function defaultDisplay(nodeName) {
-        var element, display
-        if (!elementDisplay[nodeName]) {
-            element = document.createElement(nodeName)
-            document.body.appendChild(element)
-            display = getStyles(element).getPropertyValue("display")
-            element.parentNode.removeChild(element)
-            display == "none" && (display = "block")
-            elementDisplay[nodeName] = display
-        }
-        return elementDisplay[nodeName]
-    }
-    /*
-     * Display the matched elements.
-     * @param {HTMLElement} elm
-     */
-    function show(elm) {
-        styler.css(elm, "display", "");
-        if (styler.css(elm, "display") == "none") {
-            styler.css(elm, "display", defaultDisplay(elm.nodeName));
-        }
-        return this;
-    }
-
-    function isInvisible(elm) {
-        return styler.css(elm, "display") == "none" || styler.css(elm, "opacity") == 0;
-    }
-
-    /*
-     * Hide the matched elements.
-     * @param {HTMLElement} elm
-     */
-    function hide(elm) {
-        styler.css(elm, "display", "none");
-        return this;
-    }
-
-    /*
-     * Adds the specified class(es) to each element in the set of matched elements.
-     * @param {HTMLElement} elm
-     * @param {String} name
-     */
-    function addClass(elm, name) {
-        if (!name) return this
-        var cls = className(elm),
-            names;
-        if (langx.isString(name)) {
-            names = name.split(/\s+/g);
-        } else {
-            names = name;
-        }
-        names.forEach(function(klass) {
-            var re = classRE(klass);
-            if (!cls.match(re)) {
-                cls += (cls ? " " : "") + klass;
-            }
-        });
-
-        className(elm, cls);
-
-        return this;
-    }
-
-    function getStyles( elem ) {
-
-        // Support: IE <=11 only, Firefox <=30 (#15098, #14150)
-        // IE throws on elements created in popups
-        // FF meanwhile throws on frame elements through "defaultView.getComputedStyle"
-        var view = elem.ownerDocument.defaultView;
-
-        if ( !view || !view.opener ) {
-            view = window;
-        }
-
-        return view.getComputedStyle( elem);
-    }
-
-
-    /*
-     * Get the value of a computed style property for the first element in the set of matched elements or set one or more CSS properties for every matched element.
-     * @param {HTMLElement} elm
-     * @param {String} property
-     * @param {Any} value
-     */
-    function css(elm, property, value) {
-        if (arguments.length < 3) {
-            var computedStyle,
-                computedStyle = getStyles(elm)
-            if (langx.isString(property)) {
-                return elm.style[camelCase(property)] || computedStyle.getPropertyValue(dasherize(property))
-            } else if (langx.isArrayLike(property)) {
-                var props = {}
-                forEach.call(property, function(prop) {
-                    props[prop] = (elm.style[camelCase(prop)] || computedStyle.getPropertyValue(dasherize(prop)))
-                })
-                return props
-            }
-        }
-
-        var css = '';
-        if (typeof(property) == 'string') {
-            if (!value && value !== 0) {
-                elm.style.removeProperty(dasherize(property));
-            } else {
-                css = dasherize(property) + ":" + maybeAddPx(property, value)
-            }
-        } else {
-            for (key in property) {
-                if (property[key] === undefined) {
-                    continue;
-                }
-                if (!property[key] && property[key] !== 0) {
-                    elm.style.removeProperty(dasherize(key));
-                } else {
-                    css += dasherize(key) + ':' + maybeAddPx(key, property[key]) + ';'
-                }
-            }
-        }
-
-        elm.style.cssText += ';' + css;
-        return this;
-    }
-
-    /*
-     * Determine whether any of the matched elements are assigned the given class.
-     * @param {HTMLElement} elm
-     * @param {String} name
-     */
-    function hasClass(elm, name) {
-        var re = classRE(name);
-        return elm.className && elm.className.match(re);
-    }
-
-    /*
-     * Remove a single class, multiple classes, or all classes from each element in the set of matched elements.
-     * @param {HTMLElement} elm
-     * @param {String} name
-     */
-    function removeClass(elm, name) {
-        if (name) {
-            var cls = className(elm),
-                names;
-
-            if (langx.isString(name)) {
-                names = name.split(/\s+/g);
-            } else {
-                names = name;
-            }
-
-            names.forEach(function(klass) {
-                var re = classRE(klass);
-                if (cls.match(re)) {
-                    cls = cls.replace(re, " ");
-                }
-            });
-
-            className(elm, cls.trim());
-        } else {
-            className(elm, "");
-        }
-
-        return this;
-    }
-
-    /*
-     * Add or remove one or more classes from the specified element.
-     * @param {HTMLElement} elm
-     * @param {String} name
-     * @param {} when
-     */
-    function toggleClass(elm, name, when) {
-        var self = this;
-        name.split(/\s+/g).forEach(function(klass) {
-            if (when === undefined) {
-                when = !self.hasClass(elm, klass);
-            }
-            if (when) {
-                self.addClass(elm, klass);
-            } else {
-                self.removeClass(elm, klass)
-            }
-        });
-
-        return self;
-    }
-
-    var styler = function() {
-        return styler;
-    };
-
-    langx.mixin(styler, {
-        autocssfix: false,
-        cssHooks: {
-
-        },
-
-        addClass: addClass,
-        className: className,
-        css: css,
-        disabled : disabled,        
-        hasClass: hasClass,
-        hide: hide,
-        isInvisible: isInvisible,
-        removeClass: removeClass,
-        show: show,
-        toggleClass: toggleClass
-    });
-
-    return dom.styler = styler;
+define('skylark-domx-browser/main',[
+	"./browser"
+],function(browser){
+	return browser;
 });
-define('skylark-utils-dom/noder',[
-    "./dom",
-    "./langx",
-    "./browser",
-    "./styler"
-], function(dom, langx, browser, styler) {
+define('skylark-domx-browser', ['skylark-domx-browser/main'], function (main) { return main; });
+
+define('skylark-domx-noder/noder',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-browser"
+], function(skylark, langx, browser) {
     var isIE = !!navigator.userAgent.match(/Trident/g) || !!navigator.userAgent.match(/MSIE/g),
         fragmentRE = /^\s*<(\w+|!)[^>]*>/,
         singleTagRE = /^<(\w+)\s*\/?>(?:<\/\1>|)$/,
@@ -4086,7 +10594,28 @@ define('skylark-utils-dom/noder',[
         return el;
     };
 
+    function enhancePlaceContent(placing,node) {
+        if (langx.isFunction(placing)) {
+            return placing.apply(node,[]);
+        }
+        if (langx.isArrayLike(placing)) {
+            var neddsFlattern;
+            for (var i=0;i<placing.length;i++) {
+                if (langx.isFunction(placing[i])) {
+                    placing[i] = placing[i].apply(node,[]);
+                    if (langx.isArrayLike(placing[i])) {
+                        neddsFlattern = true;
+                    }
+                }
+            }
+            if (neddsFlattern) {
+                placing = langx.flatten(placing);
+            }
+        }
+        return placing;
+    }
     function after(node, placing, copyByClone) {
+        placing = enhancePlaceContent(placing,node);
         var refNode = node,
             parent = refNode.parentNode;
         if (parent) {
@@ -4105,6 +10634,7 @@ define('skylark-utils-dom/noder',[
     }
 
     function append(node, placing, copyByClone) {
+        placing = enhancePlaceContent(placing,node);
         var parentNode = node,
             nodes = ensureNodes(placing, copyByClone);
         for (var i = 0; i < nodes.length; i++) {
@@ -4114,6 +10644,7 @@ define('skylark-utils-dom/noder',[
     }
 
     function before(node, placing, copyByClone) {
+        placing = enhancePlaceContent(placing,node);
         var refNode = node,
             parent = refNode.parentNode;
         if (parent) {
@@ -4142,7 +10673,14 @@ define('skylark-utils-dom/noder',[
      * @param } parent
      */
     function createElement(tag, props, parent) {
-        var node = document.createElement(tag);
+        var node;
+
+        if (/svg/i.test(tag)) {
+            node = document.createElementNS("http://www.w3.org/2000/svg", tag)
+        } else {
+            node = document.createElement(tag);
+        }
+
         if (props) {
             for (var name in props) {
                 node.setAttribute(name, props[name]);
@@ -4153,6 +10691,16 @@ define('skylark-utils-dom/noder',[
         }
         return node;
     }
+
+function removeSelfClosingTags(xml) {
+    var split = xml.split("/>");
+    var newXml = "";
+    for (var i = 0; i < split.length - 1;i++) {
+        var edsplit = split[i].split("<");
+        newXml += split[i] + "></" + edsplit[edsplit.length - 1].split(" ")[0] + ">";
+    }
+    return newXml + split[split.length-1];
+}
 
     /*   
      * Create a DocumentFragment from the HTML fragment.
@@ -4170,7 +10718,7 @@ define('skylark-utils-dom/noder',[
             name = "*"
         }
         var container = containers[name];
-        container.innerHTML = "" + html;
+        container.innerHTML = removeSelfClosingTags("" + html);
         dom = slice.call(container.childNodes);
 
         dom.forEach(function(node) {
@@ -4301,6 +10849,28 @@ define('skylark-utils-dom/noder',[
         return focusableIfVisible && $( element ).is( ":visible" ) && visible( $( element ) );
     };
 
+    function fromPoint(x,y) {
+        return document.elementFromPoint(x,y);
+    }
+
+    /**
+     * Generate id
+     * @param   {HTMLElement} el
+     * @returns {String}
+     * @private
+     */
+    function generateId(el) {
+        var str = el.tagName + el.className + el.src + el.href + el.textContent,
+            i = str.length,
+            sum = 0;
+
+        while (i--) {
+            sum += str.charCodeAt(i);
+        }
+
+        return sum.toString(36);
+    }
+
 
    var rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w:]+)[^>]*)\/>/gi;
  
@@ -4327,6 +10897,8 @@ define('skylark-utils-dom/noder',[
             } else {
                 node.appendChild(html);
             }
+
+            return this;
         }
     }
 
@@ -4370,6 +10942,19 @@ define('skylark-utils-dom/noder',[
     function isInDocument(node) {
       return (node === document.body) ? true : document.body.contains(node);
     }        
+
+    var blockNodes = ["div", "p", "ul", "ol", "li", "blockquote", "hr", "pre", "h1", "h2", "h3", "h4", "h5", "table"];
+
+    function isBlockNode(node) {
+        if (!node || node.nodeType === 3) {
+          return false;
+        }
+        return new RegExp("^(" + (blockNodes.join('|')) + ")$").test(node.nodeName.toLowerCase());
+    }
+
+    function isActive (elem) {
+            return elem === document.activeElement && (elem.type || elem.href);
+    }
 
     /*   
      * Get the owner document object for the specified element.
@@ -4422,31 +11007,10 @@ define('skylark-utils-dom/noder',[
      */
     function offsetParent(elm) {
         var parent = elm.offsetParent || document.body;
-        while (parent && !rootNodeRE.test(parent.nodeName) && styler.css(parent, "position") == "static") {
+        while (parent && !rootNodeRE.test(parent.nodeName) && document.defaultView.getComputedStyle(parent).position == "static") {
             parent = parent.offsetParent;
         }
         return parent;
-    }
-
-    /*   
-     *
-     * @param {Node} elm
-     * @param {Node} params
-     */
-    function overlay(elm, params) {
-        var overlayDiv = createElement("div", params);
-        styler.css(overlayDiv, {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            zIndex: 0x7FFFFFFF,
-            opacity: 0.7
-        });
-        elm.appendChild(overlayDiv);
-        return overlayDiv;
-
     }
 
     /*   
@@ -4476,7 +11040,7 @@ define('skylark-utils-dom/noder',[
     }
 
     function scrollParent( elm, includeHidden ) {
-        var position = styler.css(elm,"position" ),
+        var position = document.defaultView.getComputedStyle(elm).position,
             excludeStaticParent = position === "absolute",
             overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/,
             scrollParent = this.parents().filter( function() {
@@ -4493,7 +11057,17 @@ define('skylark-utils-dom/noder',[
             scrollParent;
     };
 
-        /*   
+
+    function reflow(elm) {
+        if (el == null) {
+          elm = document;
+        }
+        elm.offsetHeight;
+
+        return this;      
+    }
+
+    /*   
      * Replace an old node with the specified node.
      * @param {Node} node
      * @param {Node} oldNode
@@ -4503,62 +11077,18 @@ define('skylark-utils-dom/noder',[
         return this;
     }
 
-    /*   
-     * Replace an old node with the specified node.
-     * @param {HTMLElement} elm
-     * @param {Node} params
-     */
-    function throb(elm, params) {
-        params = params || {};
-        var self = this,
-            text = params.text,
-            style = params.style,
-            time = params.time,
-            callback = params.callback,
-            timer,
-            throbber = this.createElement("div", {
-                className: params.className || "throbber",
-                style: style
-            }),
-            _overlay = overlay(throbber, {
-                className: 'overlay fade'
-            }),
-            throb = this.createElement("div", {
-                className: "throb"
-            }),
-            textNode = this.createTextNode(text || ""),
-            remove = function() {
-                if (timer) {
-                    clearTimeout(timer);
-                    timer = null;
-                }
-                if (throbber) {
-                    self.remove(throbber);
-                    throbber = null;
-                }
-            },
-            update = function(params) {
-                if (params && params.text && throbber) {
-                    textNode.nodeValue = params.text;
-                }
-            };
-        throb.appendChild(textNode);
-        throbber.appendChild(throb);
-        elm.appendChild(throbber);
-        var end = function() {
-            remove();
-            if (callback) callback();
-        };
-        if (time) {
-            timer = setTimeout(end, time);
-        }
 
-        return {
-            remove: remove,
-            update: update
+    function selectable(elem, selectable) {
+        if (elem === undefined || elem.style === undefined)
+            return;
+        elem.onselectstart = selectable ? function () {
+            return false;
+        } : function () {
         };
+        elem.style.MozUserSelect = selectable ? 'auto' : 'none';
+        elem.style.KhtmlUserSelect = selectable ? 'auto' : 'none';
+        elem.unselectable = selectable ? 'on' : 'off';
     }
-
 
     /*   
      * traverse the specified node and its descendants, perform the callback function on each
@@ -4626,12 +11156,34 @@ define('skylark-utils-dom/noder',[
         }
     }
 
+
+
+    function isInput (el) { 
+        return el.tagName === 'INPUT' || 
+               el.tagName === 'TEXTAREA' || 
+               el.tagName === 'SELECT' || 
+               isEditable(el); 
+    }
+    
+    function isEditable (el) {
+      if (!el) { return false; } // no parents were editable
+      if (el.contentEditable === 'false') { return false; } // stop the lookup
+      if (el.contentEditable === 'true') { return true; } // found a contentEditable element in the chain
+      return isEditable(el.parentNode); // contentEditable is set to 'inherit'
+    }
+
     function noder() {
         return noder;
     }
 
     langx.mixin(noder, {
         active  : activeElement,
+
+        after: after,
+
+        append: append,
+
+        before: before,
 
         blur : function(el) {
             el.blur();
@@ -4642,13 +11194,14 @@ define('skylark-utils-dom/noder',[
         },
 
         clone: clone,
+
+        contains: contains,
+
         contents: contents,
 
         createElement: createElement,
 
         createFragment: createFragment,
-
-        contains: contains,
 
         createTextNode: createTextNode,
 
@@ -4656,19 +11209,32 @@ define('skylark-utils-dom/noder',[
 
         empty: empty,
 
+        generateId,
+
         fullScreen: fullScreen,
 
         focusable: focusable,
 
+        fromPoint,
+
         html: html,
+
+        isActive,
 
         isChildOf: isChildOf,
 
         isDocument: isDocument,
 
+        isEditable,
+        
         isInDocument: isInDocument,
 
+        isInput,
+
+
         isWindow: langx.isWindow,
+
+        nodeName : nodeName,
 
         offsetParent: offsetParent,
 
@@ -4676,13 +11242,9 @@ define('skylark-utils-dom/noder',[
 
         ownerWindow: ownerWindow,
 
-        after: after,
-
-        before: before,
-
         prepend: prepend,
 
-        append: append,
+        reflow: reflow,
 
         remove: remove,
 
@@ -4690,7 +11252,7 @@ define('skylark-utils-dom/noder',[
 
         replace: replace,
 
-        throb: throb,
+        selectable,
 
         traverse: traverse,
 
@@ -4703,14 +11265,408 @@ define('skylark-utils-dom/noder',[
         unwrap: unwrap
     });
 
-    return dom.noder = noder;
+    return skylark.attach("domx.noder" , noder);
 });
-define('skylark-utils-dom/finder',[
-    "./dom",
-    "./langx",
-    "./browser",
+define('skylark-domx-styler/styler',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx"
+], function(skylark, langx) {
+    var every = Array.prototype.every,
+        forEach = Array.prototype.forEach,
+        camelCase = langx.camelCase,
+        dasherize = langx.dasherize;
+
+    function maybeAddPx(name, value) {
+        return (typeof value == "number" && !cssNumber[dasherize(name)]) ? value + "px" : value
+    }
+
+    var cssNumber = {
+            'column-count': 1,
+            'columns': 1,
+            'font-weight': 1,
+            'line-height': 1,
+            'opacity': 1,
+            'z-index': 1,
+            'zoom': 1
+        },
+        classReCache = {
+
+        };
+
+    function classRE(name) {
+        return name in classReCache ?
+            classReCache[name] : (classReCache[name] = new RegExp('(^|\\s)' + name + '(\\s|$)'));
+    }
+
+    // access className property while respecting SVGAnimatedString
+    /*
+     * Adds the specified class(es) to each element in the set of matched elements.
+     * @param {HTMLElement} node
+     * @param {String} value
+     */
+    function className(node, value) {
+        var klass = node.className || '',
+            svg = klass && klass.baseVal !== undefined
+
+        if (value === undefined) return svg ? klass.baseVal : klass
+        svg ? (klass.baseVal = value) : (node.className = value)
+    }
+
+    function disabled(elm, value ) {
+        if (arguments.length < 2) {
+            return !!this.dom.disabled;
+        }
+
+        elm.disabled = value;
+
+        return this;
+    }
+
+    var elementDisplay = {};
+
+    function defaultDisplay(nodeName) {
+        var element, display
+        if (!elementDisplay[nodeName]) {
+            element = document.createElement(nodeName)
+            document.body.appendChild(element)
+            display = getStyles(element).getPropertyValue("display")
+            element.parentNode.removeChild(element)
+            display == "none" && (display = "block")
+            elementDisplay[nodeName] = display
+        }
+        return elementDisplay[nodeName]
+    }
+    /*
+     * Display the matched elements.
+     * @param {HTMLElement} elm
+     */
+    function show(elm) {
+        styler.css(elm, "display", "");
+        if (styler.css(elm, "display") == "none") {
+            styler.css(elm, "display", defaultDisplay(elm.nodeName));
+        }
+        return this;
+    }
+
+    function isInvisible(elm) {
+        return styler.css(elm, "display") == "none" || styler.css(elm, "opacity") == 0 || styler.css(elm,"visibility") == "hidden";
+    }
+
+    /*
+     * Hide the matched elements.
+     * @param {HTMLElement} elm
+     */
+    function hide(elm) {
+        styler.css(elm, "display", "none");
+        return this;
+    }
+
+    /*
+     * Adds the specified class(es) to each element in the set of matched elements.
+     * @param {HTMLElement} elm
+     * @param {String} name
+     */
+    function addClass(elm, name) {
+        if (!name) return this
+        var cls = className(elm),
+            names;
+        if (langx.isString(name)) {
+            names = name.split(/\s+/g);
+        } else {
+            names = name;
+        }
+        names.forEach(function(klass) {
+            var re = classRE(klass);
+            if (!cls.match(re)) {
+                cls += (cls ? " " : "") + klass;
+            }
+        });
+
+        className(elm, cls);
+
+        return this;
+    }
+
+    function getStyles( elem ) {
+
+        // Support: IE <=11 only, Firefox <=30 (#15098, #14150)
+        // IE throws on elements created in popups
+        // FF meanwhile throws on frame elements through "defaultView.getComputedStyle"
+        var view = elem.ownerDocument.defaultView;
+
+        if ( !view || !view.opener ) {
+            view = window;
+        }
+
+        return view.getComputedStyle( elem);
+    }
+
+
+    /*
+     * Get the value of a computed style property for the first element in the set of matched elements or set one or more CSS properties for every matched element.
+     * @param {HTMLElement} elm
+     * @param {String} property
+     * @param {Any} value
+     */
+    function css(elm, property, value) {
+        //if (arguments.length < 3) {
+        if (value == void 0) {
+            var computedStyle,
+                computedStyle = getStyles(elm)
+            if (property == void 0) {
+                return computedStyle;
+            } else if (langx.isString(property)) {
+                return elm.style[camelCase(property)] || computedStyle.getPropertyValue(dasherize(property))
+            } else if (langx.isArrayLike(property)) {
+                var props = {}
+                forEach.call(property, function(prop) {
+                    props[prop] = (elm.style[camelCase(prop)] || computedStyle.getPropertyValue(dasherize(prop)))
+                })
+                return props
+            }
+        }
+
+        var css = '';
+        if (typeof(property) == 'string') {
+            if (!value && value !== 0) {
+                elm.style.removeProperty(dasherize(property));
+            } else {
+                css = dasherize(property) + ":" + maybeAddPx(property, value)
+            }
+        } else {
+            for (key in property) {
+                if (property[key] === undefined) {
+                    continue;
+                }
+                if (!property[key] && property[key] !== 0) {
+                    elm.style.removeProperty(dasherize(key));
+                } else {
+                    css += dasherize(key) + ':' + maybeAddPx(key, property[key]) + ';'
+                }
+            }
+        }
+
+        elm.style.cssText += ';' + css;
+        return this;
+    }
+
+    /*
+     * Determine whether any of the matched elements are assigned the given class.
+     * @param {HTMLElement} elm
+     * @param {String} name
+     */
+    function hasClass(elm, name) {
+        var re = classRE(name);
+        return elm.className && elm.className.match(re);
+    }
+
+    /*
+     * Remove a single class, multiple classes, or all classes from each element in the set of matched elements.
+     * @param {HTMLElement} elm
+     * @param {String} name
+     */
+    function removeClass(elm, name) {
+        if (name) {
+            var cls = className(elm),
+                names;
+
+            if (langx.isString(name)) {
+                names = name.split(/\s+/g);
+            } else {
+                names = name;
+            }
+
+            names.forEach(function(klass) {
+                var re = classRE(klass);
+                if (cls.match(re)) {
+                    cls = cls.replace(re, " ");
+                }
+            });
+
+            className(elm, cls.trim());
+        } else {
+            className(elm, "");
+        }
+
+        return this;
+    }
+
+    /*
+     * Add or remove one or more classes from the specified element.
+     * @param {HTMLElement} elm
+     * @param {String} name
+     * @param {} when
+     */
+    function toggleClass(elm, name, when) {
+        var self = this;
+        name.split(/\s+/g).forEach(function(klass) {
+            if (when === undefined) {
+                when = !hasClass(elm, klass);
+            }
+            if (when) {
+                addClass(elm, klass);
+            } else {
+                removeClass(elm, klass)
+            }
+        });
+
+        return self;
+    }
+
+    var styler = function() {
+        return styler;
+    };
+
+    langx.mixin(styler, {
+        autocssfix: false,
+        cssHooks: {
+
+        },
+
+        addClass: addClass,
+        className: className,
+        css: css,
+        disabled : disabled,        
+        hasClass: hasClass,
+        hide: hide,
+        isInvisible: isInvisible,
+        removeClass: removeClass,
+        show: show,
+        toggleClass: toggleClass
+    });
+
+    return skylark.attach("domx.styler", styler);
+});
+define('skylark-domx-styler/main',[
+	"./styler"
+],function(styler,velm,$){
+	
+	return styler;
+});
+define('skylark-domx-styler', ['skylark-domx-styler/main'], function (main) { return main; });
+
+define('skylark-domx-noder/overlay',[
+	"skylark-domx-styler",
+	"./noder"
+],function(styler,noder){
+    /*   
+     *
+     * @param {Node} elm
+     * @param {Node} params
+     */
+    function overlay(elm, params) {
+        var overlayDiv = noder.createElement("div", params);
+        styler.css(overlayDiv, {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            zIndex: 0x7FFFFFFF,
+            opacity: 0.7
+        });
+        elm.appendChild(overlayDiv);
+        return overlayDiv;
+
+    }
+
+    return noder.overlay = overlay;
+ });
+define('skylark-domx-noder/throb',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
     "./noder"
-], function(dom, langx, browser, noder, velm) {
+],function(langx,styler,noder) {
+
+    
+    /*   
+     * Replace an old node with the specified node.
+     * @param {HTMLElement} elm
+     * @param {Node} params
+     */
+    function throb(elm, params) {
+        params = params || {};
+
+        var self = this,
+            text = params.text,
+            style = params.style,
+            time = params.time,
+            callback = params.callback,
+            timer,
+
+            throbber = noder.createElement("div", {
+                "class": params.className || "throbber"
+            }),
+            //_overlay = overlay(throbber, {
+            //    "class": 'overlay fade'
+            //}),
+            remove = function() {
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                if (throbber) {
+                    noder.remove(throbber);
+                    throbber = null;
+                }
+            },
+            update = function(params) {
+                if (params && params.text && throbber) {
+                    textNode.nodeValue = params.text;
+                }
+            };
+
+        if (params.style) {
+            styler.css(throbber,params.style);
+        }
+
+        //throb = noder.createElement("div", {
+        //   "class": params.throb && params.throb.className || "throb"
+        //}),
+        //textNode = noder.createTextNode(text || ""),
+ 
+        var content = params.content ||  '<span class="throb"></span>';
+
+        //throb.appendChild(textNode);
+        //throbber.appendChild(throb);
+
+        noder.html(throbber,content);
+        
+        elm.appendChild(throbber);
+
+        var end = function() {
+            remove();
+            if (callback) callback();
+        };
+        if (time) {
+            timer = setTimeout(end, time);
+        }
+
+        return {
+            throbber : throbber,
+            remove: remove,
+            update: update
+        };
+    }
+
+    return noder.throb = throb;
+});
+define('skylark-domx-noder/main',[
+	"./noder",
+	"./overlay",
+	"./throb"
+],function(noder){
+	return noder;
+});
+define('skylark-domx-noder', ['skylark-domx-noder/main'], function (main) { return main; });
+
+define('skylark-domx-finder/finder',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-noder",
+    "skylark-domx-styler"
+], function(skylark, langx, browser, noder,styler) {
     var local = {},
         filter = Array.prototype.filter,
         slice = Array.prototype.slice,
@@ -5040,7 +11996,7 @@ define('skylark-utils-dom/finder',[
          * @param {Object} elm
          */
         'parent': function(elm) {
-            return !!elm.parentNode;
+            return !!elm.parentElement;
         },
 
         'selected': function(elm) {
@@ -5059,6 +12015,9 @@ define('skylark-utils-dom/finder',[
 
         'visible': function(elm) {
             return elm.offsetWidth && elm.offsetWidth
+        },
+        'empty': function(elm) {
+            return !elm.hasChildNodes();
         }
     };
 
@@ -5428,7 +12387,7 @@ define('skylark-utils-dom/finder',[
      */
     function ancestor(node, selector, root) {
         var rootIsSelector = root && langx.isString(root);
-        while (node = node.parentNode) {
+        while (node = node.parentElement) {
             if (matches(node, selector)) {
                 return node;
             }
@@ -5454,25 +12413,31 @@ define('skylark-utils-dom/finder',[
     function ancestors(node, selector, root) {
         var ret = [],
             rootIsSelector = root && langx.isString(root);
-        while ((node = node.parentNode) && (node.nodeType !== 9)) {
-            ret.push(node);
+        while ((node = node.parentElement) && (node.nodeType !== 9)) {
             if (root) {
                 if (rootIsSelector) {
                     if (matches(node, root)) {
+                        break;
+                    }
+                } else if (langx.isArrayLike(root)) {
+                    if (langx.inArray(node,root)>-1) {
                         break;
                     }
                 } else if (node == root) {
                     break;
                 }
             }
-
+            if (!selector || matches(node, selector)) {
+              ret.push(node); 
+            }
         }
 
-        if (selector) {
-            ret = local.filter(ret, selector);
-        }
+        //if (selector) {
+        //    ret = local.filter(ret, selector);
+        //}
         return ret;
     }
+
 
     /*
      * Returns a element by its ID.
@@ -5503,14 +12468,81 @@ define('skylark-utils-dom/finder',[
         return ret;
     }
 
-    function closest(node, selector) {
-        while (node && !(matches(node, selector))) {
-            node = node.parentNode;
-        }
 
-        return node;
+
+    /**
+     * Gets nth child of elm, ignoring hidden children, sortable's elements (does not ignore clone if it's visible)
+     * and non-draggable elements
+     * @param  {HTMLElement} elm       The parent element
+     * @param  {Number} idx      The index of the child
+     * @param  {Object} options       Parent's options
+     * @return {HTMLElement}          The child at index idx, or null if not found
+     */
+    function childAt(elm, idx, options) {
+        var currentChild = 0,
+            children = elm.children;
+
+        options = langx.mixin({
+            ignoreHidden : true,
+            excluding : null,
+            closesting : null
+        },options);
+
+        for(var i=0;i < children.length;i++) {
+            var child = children[i];
+            if (options.ignoreHidden && styler.css(child) === "none") {
+                continue;
+            }
+            if (options.excluding && options.excluding.includes(child)) {
+                continue;
+            }
+
+            if (options.closesting &&  !closest(child, options.closesting, elm, false)) {
+                continue;
+            }
+
+            if (currentChild === idx) {
+                return child;
+            }
+            currentChild++;
+        }
+        return null;
     }
 
+
+
+    //function closest(node, selector) {
+    //    while (node && !(matches(node, selector))) {
+    //        node = node.parentElement;
+    //    }
+    //   return node;
+    //}
+
+
+    function closest(/**HTMLElement*/elm, /**String*/selector, /**HTMLElement*/ctx, includeCTX) {
+        if (elm) {
+            ctx = ctx || document;
+
+            do {
+                if (
+                    selector != null &&
+                    (
+                        selector[0] === '>' ?
+                        elm.parentElement === ctx && matches(elm, selector) :
+                        matches(elm, selector)
+                    ) ||
+                    includeCTX && elm === ctx
+                ) {
+                    return elm;
+                }
+
+                if (elm === ctx) break;
+                /* jshint boss:true */
+            } while (elm = parent(elm));
+        }
+
+        return null;
+    }
     /*
      * Get the decendant of the specified element , optionally filtered by a selector.
      * @param {HTMLElement} elm
@@ -5599,6 +12631,37 @@ define('skylark-utils-dom/finder',[
 
         return null;
     }
+
+
+    /**
+     * Returns the index of an element within its parent for a selected set of
+     * elements
+     * @param  {HTMLElement} el
+     * @param  {selector} selector
+     * @return {number}
+     */
+    function index(el, selector) {
+        var index = 0;
+
+        if (!el || !el.parentNode) {
+            return -1;
+        }
+
+        while (el && (el = el.previousElementSibling)) {
+            if (langx.isString(selector)) {
+                if (matches(el, selector)) {
+                    index++;
+                }
+            } else if (langx.isFunction(selector)) {
+                if (selector(el)) {
+                    index++;
+                }
+            }
+            index++;
+        }
+
+        return index;
+    }    
 
     /*
      * Get the last child of the specified element , optionally filtered by a selector.
@@ -5698,7 +12761,8 @@ define('skylark-utils-dom/finder',[
      * @param {String optionlly} selector
      */
     function parent(elm, selector) {
-        var node = elm.parentNode;
+        var node = (elm.host && elm !== document && elm.host.nodeType) ? elm.host : elm.parentElement;
+
         if (node && (!selector || matches(node, selector))) {
             return node;
         }
@@ -5753,7 +12817,7 @@ define('skylark-utils-dom/finder',[
      * @param {String optionlly} selector
      */
     function siblings(elm, selector) {
-        var node = elm.parentNode.firstChild,
+        var node = elm.parentElement.firstChild,
             ret = [];
         while (node) {
             if (node.nodeType == 1 && node !== elm) {
@@ -5778,6 +12842,8 @@ define('skylark-utils-dom/finder',[
 
         byId: byId,
 
+        childAt: childAt,
+
         children: children,
 
         closest: closest,
@@ -5791,6 +12857,8 @@ define('skylark-utils-dom/finder',[
         findAll: findAll,
 
         firstChild: firstChild,
+
+        index,
 
         lastChild: lastChild,
 
@@ -5811,13 +12879,22 @@ define('skylark-utils-dom/finder',[
         siblings: siblings
     });
 
-    return dom.finder = finder;
+    return skylark.attach("domx.finder", finder);
 });
-define('skylark-utils-dom/datax',[
-    "./dom",
-    "./langx",
-    "./finder"
-], function(dom, langx, finder) {
+define('skylark-domx-finder/main',[
+	"./finder"
+],function(finder){
+
+	return finder;
+});
+define('skylark-domx-finder', ['skylark-domx-finder/main'], function (main) { return main; });
+
+define('skylark-domx-data/data',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-finder",
+    "skylark-domx-noder"
+], function(skylark, langx, finder,noder) {
     var map = Array.prototype.map,
         filter = Array.prototype.filter,
         camelCase = langx.camelCase,
@@ -5838,6 +12915,107 @@ define('skylark-utils-dom/datax',[
             'frameborder': 'frameBorder',
             'contenteditable': 'contentEditable'
         };
+
+    // Strip and collapse whitespace according to HTML spec
+    function stripAndCollapse( value ) {
+      var tokens = value.match( /[^\x20\t\r\n\f]+/g ) || [];
+      return tokens.join( " " );
+    }
+
+
+    var valHooks = {
+      option: {
+        get: function( elem ) {
+          var val = elem.getAttribute( "value" );
+          return val != null ?  val :  stripAndCollapse(text( elem ) );
+        }
+      },
+      select: {
+        get: function( elem ) {
+          var value, option, i,
+            options = elem.options,
+            index = elem.selectedIndex,
+            one = elem.type === "select-one",
+            values = one ? null : [],
+            max = one ? index + 1 : options.length;
+
+          if ( index < 0 ) {
+            i = max;
+
+          } else {
+            i = one ? index : 0;
+          }
+
+          // Loop through all the selected options
+          for ( ; i < max; i++ ) {
+            option = options[ i ];
+
+            if ( option.selected &&
+
+                // Don't return options that are disabled or in a disabled optgroup
+                !option.disabled &&
+                ( !option.parentNode.disabled ||
+                  !noder.nodeName( option.parentNode, "optgroup" ) ) ) {
+
+              // Get the specific value for the option
+              value = val(option);
+
+              // We don't need an array for one selects
+              if ( one ) {
+                return value;
+              }
+
+              // Multi-Selects return an array
+              values.push( value );
+            }
+          }
+
+          return values;
+        },
+
+        set: function( elem, value ) {
+          var optionSet, option,
+            options = elem.options,
+            values = langx.makeArray( value ),
+            i = options.length;
+
+          while ( i-- ) {
+            option = options[ i ];
+
+            /* eslint-disable no-cond-assign */
+
+            if ( option.selected =
+              langx.inArray( valHooks.option.get( option ), values ) > -1
+            ) {
+              optionSet = true;
+            }
+
+            /* eslint-enable no-cond-assign */
+          }
+
+          // Force browsers to behave consistently when non-matching value is set
+          if ( !optionSet ) {
+            elem.selectedIndex = -1;
+          }
+          return values;
+        }
+      }
+    };
+
+
+    // Radios and checkboxes getter/setter
+    langx.each( [ "radio", "checkbox" ], function() {
+      valHooks[ this ] = {
+        set: function( elem, value ) {
+          if ( langx.isArray( value ) ) {
+            return ( elem.checked = langx.inArray( val(elem), value ) > -1 );
+          }
+        }
+      };
+    });
+
+
+
     /*
      * Set property values
      * @param {Object} elm  
@@ -5872,12 +13050,10 @@ define('skylark-utils-dom/datax',[
                 }
                 return this;
             } else {
-                if (elm.hasAttribute && elm.hasAttribute(name)) {
-                    return elm.getAttribute(name);
-                }
+                return elm.getAttribute ? elm.getAttribute(name) : elm[name];
             }
         } else {
-            elm.setAttribute(name, value);
+            elm.setAttribute ? elm.setAttribute(name, value) : elm[name] = value;
             return this;
         }
     }
@@ -5921,7 +13097,11 @@ define('skylark-utils-dom/datax',[
                 }
             }
             var attrName = 'data-' + name.replace(capitalRE, "-$1").toLowerCase()
-            return attr(elm, attrName);
+            var value = attr(elm, attrName);
+            if (!langx.isString(value)) {
+              value = undefined;
+            }
+            return value;
         }
 
     }
@@ -6057,7 +13237,9 @@ define('skylark-utils-dom/datax',[
      * @param {String} value
      */
     function val(elm, value) {
+        var hooks = valHooks[ elm.type ] || valHooks[ elm.nodeName.toLowerCase() ];
         if (value === undefined) {
+/*
             if (elm.multiple) {
                 // select multiple values
                 var selectedOptions = filter.call(finder.find(elm, "option"), (function(option) {
@@ -6065,12 +13247,54 @@ define('skylark-utils-dom/datax',[
                 }));
                 return pluck(selectedOptions, "value");
             } else {
-                return elm.value;
+                if (/input|textarea/i.test(elm.tagName)) {
+                  return elm.value;
+                }
+                return text(elm);
             }
+*/
+
+          if ( hooks &&  "get" in hooks &&  ( ret = hooks.get( elm, "value" ) ) !== undefined ) {
+            return ret;
+          }
+
+          ret = elm.value;
+
+          // Handle most common string cases
+          if ( typeof ret === "string" ) {
+            return ret.replace( /\r/g, "" );
+          }
+
+          // Handle cases where value is null/undef or number
+          return ret == null ? "" : ret;
+
         } else {
-            elm.value = value;
+/*          
+            if (/input|textarea/i.test(elm.tagName)) {
+              elm.value = value;
+            } else {
+              text(elm,value);
+            }
             return this;
-        }
+*/
+          // Treat null/undefined as ""; convert numbers to string
+          if ( value == null ) {
+            value = "";
+
+          } else if ( typeof value === "number" ) {
+            value += "";
+
+          } else if ( langx.isArray( value ) ) {
+            value = langx.map( value, function( value1 ) {
+              return value1 == null ? "" : value1 + "";
+            } );
+          }
+
+          // If set returns undefined, fall back to normal setting
+          if ( !hooks || !( "set" in hooks ) || hooks.set( elm, value, "value" ) === undefined ) {
+            elm.value = value;
+          }
+        }      
     }
 
 
@@ -6104,19 +13328,1183 @@ define('skylark-utils-dom/datax',[
 
         text: text,
 
-        val: val
+        val: val,
+
+        valHooks : valHooks
     });
 
-    return dom.datax = datax;
+    return skylark.attach("domx.data", datax);
 });
-define('skylark-utils-dom/eventer',[
-    "./dom",
-    "./langx",
-    "./browser",
-    "./finder",
-    "./noder",
-    "./datax"
-], function(dom, langx, browser, finder, noder, datax) {
+define('skylark-domx-query/query',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-noder",
+    "skylark-domx-finder"
+], function(skylark, langx, noder, finder) {
+    var some = Array.prototype.some,
+        push = Array.prototype.push,
+        every = Array.prototype.every,
+        concat = Array.prototype.concat,
+        slice = Array.prototype.slice,
+        map = Array.prototype.map,
+        filter = Array.prototype.filter,
+        forEach = Array.prototype.forEach,
+        indexOf = Array.prototype.indexOf,
+        sort = Array.prototype.sort,
+        isQ;
+
+    var rquickExpr = /^(?:[^#<]*(<[\w\W]+>)[^>]*$|#([\w\-]*)$)/;
+
+    var funcArg = langx.funcArg,
+        isArrayLike = langx.isArrayLike,
+        isString = langx.isString,
+        uniq = langx.uniq,
+        isFunction = langx.isFunction;
+
+    var type = langx.type,
+        isArray = langx.isArray,
+
+        isWindow = langx.isWindow,
+
+        isDocument = langx.isDocument,
+
+        isObject = langx.isObject,
+
+        isPlainObject = langx.isPlainObject,
+
+        compact = langx.compact,
+
+        flatten = langx.flatten,
+
+        camelCase = langx.camelCase,
+
+        dasherize = langx.dasherize,
+        children = finder.children;
+
+    function wrapper_node_operation(func, context, oldValueFunc) {
+        return function(html) {
+            var argType, nodes = langx.map(arguments, function(arg) {
+                argType = type(arg)
+                return argType == "function" || argType == "object" || argType == "array" || arg == null ?
+                    arg : noder.createFragment(arg)
+            });
+            if (nodes.length < 1) {
+                return this
+            }
+            this.each(function(idx) {
+                func.apply(context, [this, nodes, idx > 0]);
+            });
+            return this;
+        }
+    }
+
+    function wrapper_map(func, context) {
+        return function() {
+            var self = this,
+                params = slice.call(arguments);
+            var result = langx.map(self, function(elem, idx) {
+                return func.apply(context, [elem].concat(params));
+            });
+            return query(uniq(result));
+        }
+    }
+
+    function wrapper_selector(func, context, last) {
+        return function(selector) {
+            var self = this,
+                params = slice.call(arguments);
+            var result = this.map(function(idx, elem) {
+                // if (elem.nodeType == 1) {
+                if (elem.querySelector) {
+                    return func.apply(context, last ? [elem] : [elem, selector]);
+                } else {
+                    return [];
+                }
+            });
+            if (last && selector) {
+                return result.filter(selector);
+            } else {
+                return result;
+            }
+        }
+    }
+
+    function wrapper_selector_until(func, context, last) {
+        return function(util, selector) {
+            var self = this,
+                params = slice.call(arguments);
+            //if (selector === undefined) { //TODO : needs confirm?
+            //    selector = util;
+            //    util = undefined;
+            //}
+            var result = this.map(function(idx, elem) {
+                // if (elem.nodeType == 1) { // TODO
+                //if (elem.querySelector) {
+                    return func.apply(context, last ? [elem, util] : [elem, selector, util]);
+                //} else {
+                //    return [];
+                //}
+            });
+            if (last && selector) {
+                return result.filter(selector);
+            } else {
+                return result;
+            }
+        }
+    }
+
+
+    function wrapper_every_act(func, context) {
+        return function() {
+            var self = this,
+                params = slice.call(arguments);
+            this.each(function(idx,node) {
+                func.apply(context, [this].concat(params));
+            });
+            return self;
+        }
+    }
+
+    function wrapper_every_act_firstArgFunc(func, context, oldValueFunc) {
+        return function(arg1) {
+            var self = this,
+                params = slice.call(arguments);
+            forEach.call(self, function(elem, idx) {
+                var newArg1 = funcArg(elem, arg1, idx, oldValueFunc(elem));
+                func.apply(context, [elem, newArg1].concat(params.slice(1)));
+            });
+            return self;
+        }
+    }
+
+    function wrapper_some_chk(func, context) {
+        return function() {
+            var self = this,
+                params = slice.call(arguments);
+            return some.call(self, function(elem) {
+                return func.apply(context, [elem].concat(params));
+            });
+        }
+    }
+
+    function wrapper_name_value(func, context, oldValueFunc) {
+        return function(name, value) {
+            var self = this;
+
+            if (langx.isPlainObject(name) || langx.isDefined(value)) {
+                forEach.call(self, function(elem, idx) {
+                    var newValue;
+                    if (oldValueFunc) {
+                        newValue = funcArg(elem, value, idx, oldValueFunc(elem, name));
+                    } else {
+                        newValue = value
+                    }
+                    func.apply(context, [elem,name,newValue]);
+                });
+                return self;
+            } else {
+                if (self[0]) {
+                    return func.apply(context, [self[0], name]);
+                }
+            }
+
+        }
+    }
+
+    function wrapper_value(func, context, oldValueFunc) {
+        return function(value) {
+            var self = this;
+
+            if (langx.isDefined(value)) {
+                forEach.call(self, function(elem, idx) {
+                    var newValue;
+                    if (oldValueFunc) {
+                        newValue = funcArg(elem, value, idx, oldValueFunc(elem));
+                    } else {
+                        newValue = value
+                    }
+                    func.apply(context, [elem, newValue]);
+                });
+                return self;
+            } else {
+                if (self[0]) {
+                    return func.apply(context, [self[0]]);
+                }
+            }
+
+        }
+    }
+
+
+    var NodeList = langx.klass({
+        klassName: "SkNodeList",
+        init: function(selector, context) {
+            var self = this,
+                match, nodes, node, props;
+
+            if (selector) {
+                self.context = context = context || noder.doc();
+
+                if (isString(selector)) {
+                    // a html string or a css selector is expected
+                    self.selector = selector;
+
+                    if (selector.charAt(0) === "<" && selector.charAt(selector.length - 1) === ">" && selector.length >= 3) {
+                        match = [null, selector, null];
+                    } else {
+                        match = rquickExpr.exec(selector);
+                    }
+
+                    if (match) {
+                        if (match[1]) {
+                            // if selector is html
+                            nodes = noder.createFragment(selector);
+
+                            if (langx.isPlainObject(context)) {
+                                props = context;
+                            }
+
+                        } else {
+                            node = finder.byId(match[2], noder.ownerDoc(context));
+
+                            if (node) {
+                                // if selector is id
+                                nodes = [node];
+                            }
+
+                        }
+                    } else {
+                        // if selector is css selector
+                        if (langx.isString(context)) {
+                            context = finder.find(context);
+                        }
+
+                        nodes = finder.descendants(context, selector);
+                    }
+                } else {
+                    if (!noder.isWindow(selector) && isArrayLike(selector)) {
+                        // a dom node array is expected
+                        nodes = selector;
+                    } else {
+                        // a dom node is expected
+                        nodes = [selector];
+                    }
+                    //self.add(selector, false);
+                }
+            }
+
+
+            if (nodes) {
+
+                push.apply(self, nodes);
+
+                if (props) {
+                    for ( var name  in props ) {
+                        // Properties of context are called as methods if possible
+                        if ( langx.isFunction( this[ name ] ) ) {
+                            this[ name ]( props[ name ] );
+                        } else {
+                            this.attr( name, props[ name ] );
+                        }
+                    }
+                }
+            }
+
+            return self;
+        }
+    });
+
+    var query = (function() {
+        isQ = function(object) {
+            return object instanceof NodeList;
+        }
+        init = function(selector, context) {
+            return new NodeList(selector, context);
+        }
+
+        var $ = function(selector, context) {
+            if (isFunction(selector)) {
+                $.ready(function() {
+                    selector($);
+                });
+                return rootQuery;
+            } else if (isQ(selector)) {
+                return selector;
+            } else {
+                if (context && isQ(context) && isString(selector)) {
+                    return context.find(selector);
+                }
+                return init(selector, context);
+            }
+        },rootQuery = $(document);
+
+        $.fn = NodeList.prototype;
+        langx.mixin($.fn, {
+            // `map` and `slice` in the jQuery API work differently
+            // from their array counterparts
+            length : 0,
+
+            map: function(fn) {
+                return $(uniq(langx.map(this, function(el, i) {
+                    return fn.call(el, i, el)
+                })));
+            },
+
+            slice: function() {
+                return $(slice.apply(this, arguments))
+            },
+
+            forEach: function() {
+                return forEach.apply(this,arguments);
+            },
+
+            get: function(idx) {
+                return idx === undefined ? slice.call(this) : this[idx >= 0 ? idx : idx + this.length]
+            },
+
+            indexOf: function() {
+                return indexOf.apply(this,arguments);
+            },
+
+            sort : function() {
+                return sort.apply(this,arguments);
+            },
+
+            toArray: function() {
+                return slice.call(this);
+            },
+
+            size: function() {
+                return this.length
+            },
+
+            //remove: wrapper_every_act(noder.remove, noder),
+            remove : function(selector) {
+                if (selector) {
+                    return this.find(selector).remove();
+                }
+                this.each(function(i,node){
+                    noder.remove(node);
+                });
+                return this;
+            },
+
+            each: function(callback) {
+                langx.each(this, callback);
+                return this;
+            },
+
+            filter: function(selector) {
+                if (isFunction(selector)) return this.not(this.not(selector))
+                return $(filter.call(this, function(element) {
+                    return finder.matches(element, selector)
+                }))
+            },
+
+            add: function(selector, context) {
+                return $(uniq(this.toArray().concat($(selector, context).toArray())));
+            },
+
+            is: function(selector) {
+                if (this.length > 0) {
+                    var self = this;
+                    if (langx.isString(selector)) {
+                        return some.call(self,function(elem) {
+                            return finder.matches(elem, selector);
+                        });
+                    } else if (langx.isArrayLike(selector)) {
+                       return some.call(self,function(elem) {
+                            return langx.inArray(elem, selector) > -1;
+                        });
+                    } else if (langx.isHtmlNode(selector)) {
+                       return some.call(self,function(elem) {
+                            return elem ==  selector;
+                        });
+                    }
+                }
+                return false;
+            },
+            
+            not: function(selector) {
+                var nodes = []
+                if (isFunction(selector) && selector.call !== undefined)
+                    this.each(function(idx,node) {
+                        if (!selector.call(this, idx,node)) nodes.push(this)
+                    })
+                else {
+                    var excludes = typeof selector == 'string' ? this.filter(selector) :
+                        (isArrayLike(selector) && isFunction(selector.item)) ? slice.call(selector) : $(selector)
+                    this.forEach(function(el) {
+                        if (excludes.indexOf(el) < 0) nodes.push(el)
+                    })
+                }
+                return $(nodes)
+            },
+
+            has: function(selector) {
+                return this.filter(function() {
+                    return isObject(selector) ?
+                        noder.contains(this, selector) :
+                        $(this).find(selector).size()
+                })
+            },
+
+            eq: function(idx) {
+                return idx === -1 ? this.slice(idx) : this.slice(idx, +idx + 1);
+            },
+
+            first: function() {
+                return this.eq(0);
+            },
+
+            last: function() {
+                return this.eq(-1);
+            },
+
+            find: wrapper_selector(finder.descendants, finder),
+
+            closest: wrapper_selector(finder.closest, finder),
+            /*
+                        closest: function(selector, context) {
+                            var node = this[0],
+                                collection = false
+                            if (typeof selector == 'object') collection = $(selector)
+                            while (node && !(collection ? collection.indexOf(node) >= 0 : finder.matches(node, selector)))
+                                node = node !== context && !isDocument(node) && node.parentNode
+                            return $(node)
+                        },
+            */
+
+
+            parents: wrapper_selector(finder.ancestors, finder),
+
+            parentsUntil: wrapper_selector_until(finder.ancestors, finder),
+
+
+            parent: wrapper_selector(finder.parent, finder),
+
+            children: wrapper_selector(finder.children, finder),
+
+            contents: wrapper_map(noder.contents, noder),
+
+            empty: wrapper_every_act(noder.empty, noder),
+
+            html: wrapper_value(noder.html, noder),
+
+            // `pluck` is borrowed from Prototype.js
+            pluck: function(property) {
+                return langx.map(this, function(el) {
+                    return el[property]
+                })
+            },
+
+            pushStack : function(elms) {
+                var ret = $(elms);
+                ret.prevObject = this;
+                return ret;
+            },
+            
+            replaceWith: function(newContent) {
+                return this.before(newContent).remove();
+            },
+
+            wrap: function(html) {
+                /*
+                var func = isFunction(structure)
+                if (this[0] && !func)
+                    var dom = $(structure).get(0),
+                        clone = dom.parentNode || this.length > 1
+
+                return this.each(function(index,node) {
+                    $(this).wrapAll(
+                        func ? structure.call(this, index,node) :
+                        clone ? dom.cloneNode(true) : dom
+                    )
+                })
+                */
+                var htmlIsFunction = typeof html === "function";
+
+                return this.each( function( i ) {
+                    $( this ).wrapAll( htmlIsFunction ? html.call( this, i ) : html );
+                } );                
+            },
+
+            wrapAll: function(html) {
+                /*
+                if (this[0]) {
+                    $(this[0]).before(wrappingElement = $(wrappingElement));
+                    var children;
+                    // drill down to the inmost element
+                    while ((children = wrappingElement.children()).length) {
+                        wrappingElement = children.first();
+                    }
+                    $(wrappingElement).append(this);
+                }
+                return this
+                */
+                var wrap;
+
+                if ( this[ 0 ] ) {
+                    if ( typeof html === "function" ) {
+                        html = html.call( this[ 0 ] );
+                    }
+
+                    // The elements to wrap the target around
+                    wrap = $( html, this[ 0 ].ownerDocument ).eq( 0 ).clone( true );
+
+                    if ( this[ 0 ].parentNode ) {
+                        wrap.insertBefore( this[ 0 ] );
+                    }
+
+                    wrap.map( function() {
+                        var elem = this;
+
+                        while ( elem.firstElementChild ) {
+                            elem = elem.firstElementChild;
+                        }
+
+                        return elem;
+                    } ).append( this );
+                }
+
+                return this;
+
+            },
+
+            wrapInner: function(html) {
+                /*
+                var func = isFunction(wrappingElement)
+                return this.each(function(index,node) {
+                    var self = $(this),
+                        contents = self.contents(),
+                        dom = func ? wrappingElement.call(this, index,node) : wrappingElement
+                    contents.length ? contents.wrapAll(dom) : self.append(dom)
+                })
+                */
+                if ( typeof html === "function" ) {
+                    return this.each( function( i ) {
+                        $( this ).wrapInner( html.call( this, i ) );
+                    } );
+                }
+
+                return this.each( function() {
+                    var self = $( this ),
+                        contents = self.contents();
+
+                    if ( contents.length ) {
+                        contents.wrapAll( html );
+
+                    } else {
+                        self.append( html );
+                    }
+                } );
+
+            },
+
+            unwrap: function(selector) {
+                /*
+                if (this.parent().children().length === 0) {
+                    // remove dom without text
+                    this.parent(selector).not("body").each(function() {
+                        $(this).replaceWith(document.createTextNode(this.childNodes[0].textContent));
+                    });
+                } else {
+                    this.parent().each(function() {
+                        $(this).replaceWith($(this).children())
+                    });
+                }
+                return this
+                */
+                this.parent(selector).not("body").each( function() {
+                    $(this).replaceWith(this.childNodes);
+                });
+                return this;
+
+            },
+
+            clone: function() {
+                return this.map(function() {
+                    return this.cloneNode(true)
+                })
+            },
+
+
+            toggle: function(setting) {
+                return this.each(function() {
+                    var el = $(this);
+                    (setting === undefined ? el.css("display") == "none" : setting) ? el.show(): el.hide()
+                })
+            },
+
+            prev: function(selector) {
+                return $(this.pluck('previousElementSibling')).filter(selector || '*')
+            },
+
+            prevAll: wrapper_selector(finder.previousSiblings, finder),
+
+            next: function(selector) {
+                return $(this.pluck('nextElementSibling')).filter(selector || '*')
+            },
+
+            nextAll: wrapper_selector(finder.nextSiblings, finder),
+
+            siblings: wrapper_selector(finder.siblings, finder),
+
+            index: function(elem) {
+                if (elem) {
+                    return this.indexOf($(elem)[0]);
+                } else {
+                    return this.parent().children().indexOf(this[0]);
+                }
+            }
+        });
+
+        // for now
+        $.fn.detach = $.fn.remove;
+
+        $.fn.hover = function(fnOver, fnOut) {
+            return this.mouseenter(fnOver).mouseleave(fnOut || fnOver);
+        };
+
+
+        var traverseNode = noder.traverse;
+
+
+        $.fn.after = wrapper_node_operation(noder.after, noder);
+
+        $.fn.prepend = wrapper_node_operation(noder.prepend, noder);
+
+        $.fn.before = wrapper_node_operation(noder.before, noder);
+
+        $.fn.append = wrapper_node_operation(noder.append, noder);
+
+
+        langx.each( {
+            appendTo: "append",
+            prependTo: "prepend",
+            insertBefore: "before",
+            insertAfter: "after",
+            replaceAll: "replaceWith"
+        }, function( name, original ) {
+            $.fn[ name ] = function( selector ) {
+                var elems,
+                    ret = [],
+                    insert = $( selector ),
+                    last = insert.length - 1,
+                    i = 0;
+
+                for ( ; i <= last; i++ ) {
+                    elems = i === last ? this : this.clone( true );
+                    $( insert[ i ] )[ original ]( elems );
+
+                    // Support: Android <=4.0 only, PhantomJS 1 only
+                    // .get() because push.apply(_, arraylike) throws on ancient WebKit
+                    push.apply( ret, elems.get() );
+                }
+
+                return this.pushStack( ret );
+            };
+        } );
+
+/*
+        $.fn.insertAfter = function(html) {
+            $(html).after(this);
+            return this;
+        };
+
+        $.fn.insertBefore = function(html) {
+            $(html).before(this);
+            return this;
+        };
+
+        $.fn.appendTo = function(html) {
+            $(html).append(this);
+            return this;
+        };
+
+        $.fn.prependTo = function(html) {
+            $(html).prepend(this);
+            return this;
+        };
+
+        $.fn.replaceAll = function(selector) {
+            $(selector).replaceWith(this);
+            return this;
+        };
+*/
+        return $;
+    })();
+
+    (function($) {
+        $.fn.scrollParent = function( includeHidden ) {
+            var position = this.css( "position" ),
+                excludeStaticParent = position === "absolute",
+                overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/,
+                scrollParent = this.parents().filter( function() {
+                    var parent = $( this );
+                    if ( excludeStaticParent && parent.css( "position" ) === "static" ) {
+                        return false;
+                    }
+                    return overflowRegex.test( parent.css( "overflow" ) + parent.css( "overflow-y" ) +
+                        parent.css( "overflow-x" ) );
+                } ).eq( 0 );
+
+            return position === "fixed" || !scrollParent.length ?
+                $( this[ 0 ].ownerDocument || document ) :
+                scrollParent;
+        };
+
+    })(query);
+
+
+    (function($) {
+        $.fn.end = function() {
+            return this.prevObject || $()
+        }
+
+        $.fn.andSelf = function() {
+            return this.add(this.prevObject || $())
+        }
+
+        $.fn.addBack = function(selector) {
+            if (this.prevObject) {
+                if (selector) {
+                    return this.add(this.prevObject.filter(selector));
+                } else {
+                    return this.add(this.prevObject);
+                }
+            } else {
+                return this;
+            }
+        }
+
+        'filter,add,not,eq,first,last,find,closest,parents,parent,children,siblings,prev,prevAll,next,nextAll'.split(',').forEach(function(property) {
+            var fn = $.fn[property]
+            $.fn[property] = function() {
+                var ret = fn.apply(this, arguments)
+                ret.prevObject = this
+                return ret
+            }
+        })
+    })(query);
+
+
+    (function($) {
+        $.fn.query = $.fn.find;
+
+        $.fn.place = function(refNode, position) {
+            // summary:
+            //      places elements of this node list relative to the first element matched
+            //      by queryOrNode. Returns the original NodeList. See: `dojo/dom-construct.place`
+            // queryOrNode:
+            //      may be a string representing any valid CSS3 selector or a DOM node.
+            //      In the selector case, only the first matching element will be used
+            //      for relative positioning.
+            // position:
+            //      can be one of:
+            //
+            //      -   "last" (default)
+            //      -   "first"
+            //      -   "before"
+            //      -   "after"
+            //      -   "only"
+            //      -   "replace"
+            //
+            //      or an offset in the childNodes
+            if (langx.isString(refNode)) {
+                refNode = finder.descendant(refNode);
+            } else if (isQ(refNode)) {
+                refNode = refNode[0];
+            }
+            return this.each(function(i, node) {
+                switch (position) {
+                    case "before":
+                        noder.before(refNode, node);
+                        break;
+                    case "after":
+                        noder.after(refNode, node);
+                        break;
+                    case "replace":
+                        noder.replace(refNode, node);
+                        break;
+                    case "only":
+                        noder.empty(refNode);
+                        noder.append(refNode, node);
+                        break;
+                    case "first":
+                        noder.prepend(refNode, node);
+                        break;
+                        // else fallthrough...
+                    default: // aka: last
+                        noder.append(refNode, node);
+                }
+            });
+        };
+
+        $.fn.addContent = function(content, position) {
+            if (content.template) {
+                content = langx.substitute(content.template, content);
+            }
+            return this.append(content);
+        };
+
+
+
+        $.fn.disableSelection = ( function() {
+            var eventType = "onselectstart" in document.createElement( "div" ) ?
+                "selectstart" :
+                "mousedown";
+
+            return function() {
+                return this.on( eventType + ".ui-disableSelection", function( event ) {
+                    event.preventDefault();
+                } );
+            };
+        } )();
+
+        $.fn.enableSelection = function() {
+            return this.off( ".ui-disableSelection" );
+        };
+
+        $.fn.reflow = function() {
+            return noder.flow(this[0]);
+        };
+
+        $.fn.isBlockNode = function() {
+            return noder.isBlockNode(this[0]);
+        };
+       
+
+    })(query);
+
+    query.fn.plugin = function(name,options) {
+        var args = slice.call( arguments, 1 ),
+            self = this,
+            returnValue = this;
+
+        this.each(function(){
+            returnValue = plugins.instantiate.apply(self,[this,name].concat(args));
+        });
+        return returnValue;
+    };
+
+
+    query.wraps = {
+        wrapper_node_operation,
+        wrapper_map,
+        wrapper_value,
+        wrapper_selector,
+        wrapper_some_chk,
+        wrapper_selector_until,
+        wrapper_every_act_firstArgFunc,
+        wrapper_every_act,
+        wrapper_name_value
+
+    };
+
+    return skylark.attach("domx.query", query);
+
+});
+define('skylark-domx-query/main',[
+	"./query",
+	"skylark-domx-styler"
+],function($,styler){
+
+    $.fn.style = $.wraps.wrapper_name_value(styler.css, styler);
+
+    $.fn.css = $.wraps.wrapper_name_value(styler.css, styler);
+
+    //hasClass(name)
+    $.fn.hasClass = $.wraps.wrapper_some_chk(styler.hasClass, styler);
+
+    //addClass(name)
+    $.fn.addClass = $.wraps.wrapper_every_act_firstArgFunc(styler.addClass, styler, styler.className);
+
+    //removeClass(name)
+    $.fn.removeClass = $.wraps.wrapper_every_act_firstArgFunc(styler.removeClass, styler, styler.className);
+
+    //toogleClass(name,when)
+    $.fn.toggleClass = $.wraps.wrapper_every_act_firstArgFunc(styler.toggleClass, styler, styler.className);
+
+    $.fn.replaceClass = function(newClass, oldClass) {
+        this.removeClass(oldClass);
+        this.addClass(newClass);
+        return this;
+    };
+
+    $.fn.replaceClass = function(newClass, oldClass) {
+        this.removeClass(oldClass);
+        this.addClass(newClass);
+        return this;
+    };
+        
+
+	return $;
+});
+define('skylark-domx-query', ['skylark-domx-query/main'], function (main) { return main; });
+
+define('skylark-domx-velm/velm',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-noder",
+    "skylark-domx-finder",
+    "skylark-domx-query"
+], function(skylark, langx, noder, finder, $) {
+    var map = Array.prototype.map,
+        slice = Array.prototype.slice;
+    /*
+     * VisualElement is a skylark class type wrapping a visule dom node,
+     * provides a number of prototype methods and supports chain calls.
+     */
+    var VisualElement = langx.klass({
+        klassName: "VisualElement",
+
+        "_construct": function(node) {
+            if (langx.isString(node)) {
+                if (node.charAt(0) === "<") {
+                    //html
+                    node = noder.createFragment(node)[0];
+                } else {
+                    // id
+                    node = document.getElementById(node);
+                }
+            }
+            this._elm = node;
+        }
+    });
+
+    VisualElement.prototype.$ = VisualElement.prototype.query = function(selector) {
+        return $(selector,this._elm);
+    };
+
+    VisualElement.prototype.elm = function() {
+        return this._elm;
+    };
+
+    /*
+     * the VisualElement object wrapping document.body
+     */
+    var root = new VisualElement(document.body),
+        velm = function(node) {
+            if (node) {
+                return new VisualElement(node);
+            } else {
+                return root;
+            }
+        };
+    /*
+     * Extend VisualElement prototype with wrapping the specified methods.
+     * @param {ArrayLike} fn
+     * @param {Object} context
+     */
+    function _delegator(fn, context) {
+        return function() {
+            var self = this,
+                elem = self._elm,
+                ret = fn.apply(context, [elem].concat(slice.call(arguments)));
+
+            if (ret) {
+                if (ret === context) {
+                    return self;
+                } else {
+                    if (ret instanceof HTMLElement) {
+                        ret = new VisualElement(ret);
+                    } else if (langx.isArrayLike(ret)) {
+                        ret = map.call(ret, function(el) {
+                            if (el instanceof HTMLElement) {
+                                return new VisualElement(el);
+                            } else {
+                                return el;
+                            }
+                        })
+                    }
+                }
+            }
+            return ret;
+        };
+    }
+
+    langx.mixin(velm, {
+        batch: function(nodes, action, args) {
+            nodes.forEach(function(node) {
+                var elm = (node instanceof VisualElement) ? node : velm(node);
+                elm[action].apply(elm, args);
+            });
+
+            return this;
+        },
+
+        root: new VisualElement(document.body),
+
+        VisualElement: VisualElement,
+
+        partial: function(name, fn) {
+            var props = {};
+
+            props[name] = fn;
+
+            VisualElement.partial(props);
+        },
+
+        delegate: function(names, context) {
+            var props = {};
+
+            names.forEach(function(name) {
+                props[name] = _delegator(context[name], context);
+            });
+
+            VisualElement.partial(props);
+        }
+    });
+
+    // from ./finder
+    velm.delegate([
+        "ancestor",
+        "ancestors",
+        "children",
+        "descendant",
+        "find",
+        "findAll",
+        "firstChild",
+        "lastChild",
+        "matches",
+        "nextSibling",
+        "nextSiblings",
+        "parent",
+        "previousSibling",
+        "previousSiblings",
+        "siblings"
+    ], finder);
+
+    /*
+     * find a dom element matched by the specified selector.
+     * @param {String} selector
+     */
+    velm.find = function(selector) {
+        if (selector === "body") {
+            return this.root;
+        } else {
+            return this.root.descendant(selector);
+        }
+    };
+
+
+    // from ./noder
+    velm.delegate([
+        "after",
+        "append",
+        "before",
+        "clone",
+        "contains",
+        "contents",
+        "empty",
+        "html",
+        "isChildOf",
+        "isDocument",
+        "isInDocument",
+        "isWindow",
+        "ownerDoc",
+        "prepend",
+        "remove",
+        "removeChild",
+        "replace",
+        "reverse",
+        "throb",
+        "traverse",
+        "wrapper",
+        "wrapperInner",
+        "unwrap"
+    ], noder);
+
+
+    return skylark.attach("domx.velm", velm);
+});
+define('skylark-domx-velm/main',[
+	"./velm",
+	"skylark-domx-styler"
+],function(velm,styler){
+    // from ./styler
+    velm.delegate([
+        "addClass",
+        "className",
+        "css",
+        "hasClass",
+        "hide",
+        "isInvisible",
+        "removeClass",
+        "show",
+        "toggleClass"
+    ], styler);
+
+    // properties
+
+    var properties = [ 'position', 'left', 'top', 'right', 'bottom', 'width', 'height', 'border', 'borderLeft',
+    'borderTop', 'borderRight', 'borderBottom', 'borderColor', 'display', 'overflow', 'margin', 'marginLeft', 'marginTop', 'marginRight', 'marginBottom', 'padding', 'paddingLeft', 'paddingTop', 'paddingRight', 'paddingBottom', 'color',
+    'background', 'backgroundColor', 'opacity', 'fontSize', 'fontWeight', 'textAlign', 'textDecoration', 'textTransform', 'cursor', 'zIndex' ];
+
+    properties.forEach( function ( property ) {
+
+        var method = property;
+
+        velm.VisualElement.prototype[method ] = function (value) {
+
+            this.css( property, value );
+
+            return this;
+
+        };
+
+    });
+
+	return velm;
+});
+define('skylark-domx-velm', ['skylark-domx-velm/main'], function (main) { return main; });
+
+define('skylark-domx-data/main',[
+    "./data",
+    "skylark-domx-velm",
+    "skylark-domx-query"    
+],function(data,velm,$){
+    // from ./data
+    velm.delegate([
+        "attr",
+        "data",
+        "prop",
+        "removeAttr",
+        "removeData",
+        "text",
+        "val"
+    ], data);
+
+    $.fn.text = $.wraps.wrapper_value(data.text, data, data.text);
+
+    $.fn.attr = $.wraps.wrapper_name_value(data.attr, data, data.attr);
+
+    $.fn.removeAttr = $.wraps.wrapper_every_act(data.removeAttr, data);
+
+    $.fn.prop = $.wraps.wrapper_name_value(data.prop, data, data.prop);
+
+    $.fn.removeProp = $.wraps.wrapper_every_act(data.removeProp, data);
+
+    $.fn.data = $.wraps.wrapper_name_value(data.data, data);
+
+    $.fn.removeData = $.wraps.wrapper_every_act(data.removeData);
+
+    $.fn.val = $.wraps.wrapper_value(data.val, data, data.val);
+
+
+    return data;
+});
+define('skylark-domx-data', ['skylark-domx-data/main'], function (main) { return main; });
+
+define('skylark-domx-eventer/eventer',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-finder",
+    "skylark-domx-noder",
+    "skylark-domx-data"
+], function(skylark, langx, browser, finder, noder, datax) {
     var mixin = langx.mixin,
         each = langx.each,
         slice = Array.prototype.slice,
@@ -6155,99 +14543,104 @@ define('skylark-utils-dom/eventer',[
         };
     }
 
+    function isHandler(callback) {
+        return callback && (langx.isFunction(callback) || langx.isFunction(callback.handleEvent));
+    }
+
+    var NativeEventCtors = [
+            window["CustomEvent"], // 0 default
+            window["CompositionEvent"], // 1
+            window["DragEvent"], // 2
+            window["Event"], // 3
+            window["FocusEvent"], // 4
+            window["KeyboardEvent"], // 5
+            window["MessageEvent"], // 6
+            window["MouseEvent"], // 7
+            window["MouseScrollEvent"], // 8
+            window["MouseWheelEvent"], // 9
+            window["MutationEvent"], // 10
+            window["ProgressEvent"], // 11
+            window["TextEvent"], // 12
+            window["TouchEvent"], // 13
+            window["UIEvent"], // 14
+            window["WheelEvent"], // 15
+            window["ClipboardEvent"] // 16
+        ],
+        NativeEvents = {
+            "compositionstart": 1, // CompositionEvent
+            "compositionend": 1, // CompositionEvent
+            "compositionupdate": 1, // CompositionEvent
+
+            "beforecopy": 16, // ClipboardEvent
+            "beforecut": 16, // ClipboardEvent
+            "beforepaste": 16, // ClipboardEvent
+            "copy": 16, // ClipboardEvent
+            "cut": 16, // ClipboardEvent
+            "paste": 16, // ClipboardEvent
+
+            "drag": 2, // DragEvent
+            "dragend": 2, // DragEvent
+            "dragenter": 2, // DragEvent
+            "dragexit": 2, // DragEvent
+            "dragleave": 2, // DragEvent
+            "dragover": 2, // DragEvent
+            "dragstart": 2, // DragEvent
+            "drop": 2, // DragEvent
+
+            "abort": 3, // Event
+            "change": 3, // Event
+            "error": 3, // Event
+            "selectionchange": 3, // Event
+            "submit": 3, // Event
+            "reset": 3, // Event
+
+            "focus": 4, // FocusEvent
+            "blur": 4, // FocusEvent
+            "focusin": 4, // FocusEvent
+            "focusout": 4, // FocusEvent
+
+            "keydown": 5, // KeyboardEvent
+            "keypress": 5, // KeyboardEvent
+            "keyup": 5, // KeyboardEvent
+
+            "message": 6, // MessageEvent
+
+            "click": 7, // MouseEvent
+            "contextmenu": 7, // MouseEvent
+            "dblclick": 7, // MouseEvent
+            "mousedown": 7, // MouseEvent
+            "mouseup": 7, // MouseEvent
+            "mousemove": 7, // MouseEvent
+            "mouseover": 7, // MouseEvent
+            "mouseout": 7, // MouseEvent
+            "mouseenter": 7, // MouseEvent
+            "mouseleave": 7, // MouseEvent
+
+
+            "textInput": 12, // TextEvent
+
+            "touchstart": 13, // TouchEvent
+            "touchmove": 13, // TouchEvent
+            "touchend": 13, // TouchEvent
+
+            "load": 14, // UIEvent
+            "resize": 14, // UIEvent
+            "select": 14, // UIEvent
+            "scroll": 14, // UIEvent
+            "unload": 14, // UIEvent,
+
+            "wheel": 15 // WheelEvent
+        };
+
     //create a custom dom event
     var createEvent = (function() {
-        var EventCtors = [
-                window["CustomEvent"], // 0 default
-                window["CompositionEvent"], // 1
-                window["DragEvent"], // 2
-                window["Event"], // 3
-                window["FocusEvent"], // 4
-                window["KeyboardEvent"], // 5
-                window["MessageEvent"], // 6
-                window["MouseEvent"], // 7
-                window["MouseScrollEvent"], // 8
-                window["MouseWheelEvent"], // 9
-                window["MutationEvent"], // 10
-                window["ProgressEvent"], // 11
-                window["TextEvent"], // 12
-                window["TouchEvent"], // 13
-                window["UIEvent"], // 14
-                window["WheelEvent"], // 15
-                window["ClipboardEvent"] // 16
-            ],
-            NativeEvents = {
-                "compositionstart": 1, // CompositionEvent
-                "compositionend": 1, // CompositionEvent
-                "compositionupdate": 1, // CompositionEvent
-
-                "beforecopy": 16, // ClipboardEvent
-                "beforecut": 16, // ClipboardEvent
-                "beforepaste": 16, // ClipboardEvent
-                "copy": 16, // ClipboardEvent
-                "cut": 16, // ClipboardEvent
-                "paste": 16, // ClipboardEvent
-
-                "drag": 2, // DragEvent
-                "dragend": 2, // DragEvent
-                "dragenter": 2, // DragEvent
-                "dragexit": 2, // DragEvent
-                "dragleave": 2, // DragEvent
-                "dragover": 2, // DragEvent
-                "dragstart": 2, // DragEvent
-                "drop": 2, // DragEvent
-
-                "abort": 3, // Event
-                "change": 3, // Event
-                "error": 3, // Event
-                "selectionchange": 3, // Event
-                "submit": 3, // Event
-                "reset": 3, // Event
-
-                "focus": 4, // FocusEvent
-                "blur": 4, // FocusEvent
-                "focusin": 4, // FocusEvent
-                "focusout": 4, // FocusEvent
-
-                "keydown": 5, // KeyboardEvent
-                "keypress": 5, // KeyboardEvent
-                "keyup": 5, // KeyboardEvent
-
-                "message": 6, // MessageEvent
-
-                "click": 7, // MouseEvent
-                "contextmenu": 7, // MouseEvent
-                "dblclick": 7, // MouseEvent
-                "mousedown": 7, // MouseEvent
-                "mouseup": 7, // MouseEvent
-                "mousemove": 7, // MouseEvent
-                "mouseover": 7, // MouseEvent
-                "mouseout": 7, // MouseEvent
-                "mouseenter": 7, // MouseEvent
-                "mouseleave": 7, // MouseEvent
-
-
-                "textInput": 12, // TextEvent
-
-                "touchstart": 13, // TouchEvent
-                "touchmove": 13, // TouchEvent
-                "touchend": 13, // TouchEvent
-
-                "load": 14, // UIEvent
-                "resize": 14, // UIEvent
-                "select": 14, // UIEvent
-                "scroll": 14, // UIEvent
-                "unload": 14, // UIEvent,
-
-                "wheel": 15 // WheelEvent
-            };
 
         function getEventCtor(type) {
             var idx = NativeEvents[type];
             if (!idx) {
                 idx = 0;
             }
-            return EventCtors[idx];
+            return NativeEventCtors[idx];
         }
 
         return function(type, props) {
@@ -6336,6 +14729,8 @@ define('skylark-utils-dom/eventer',[
                             args = [e];
                         }
 
+                        e.type = self._event; // convert realEvent to listened event
+
                         langx.each(bindings, function(idx, binding) {
                             var match = elm;
                             if (e.isImmediatePropagationStopped && e.isImmediatePropagationStopped()) {
@@ -6378,7 +14773,12 @@ define('skylark-utils-dom/eventer',[
                                 self.remove(fn, options);
                             }
 
-                            var result = fn.apply(match, args);
+                            var result ;
+                            if (fn.handleEvent) {
+                                result = fn.handleEvent.apply(fn,args);
+                            } else {
+                                result = fn.apply(match, args);
+                            }
 
                             if (result === false) {
                                 e.preventDefault();
@@ -6514,7 +14914,7 @@ define('skylark-utils-dom/eventer',[
             return $this;
         }
 
-        if (!langx.isString(selector) && !langx.isFunction(callback) && callback !== false) {
+        if (!langx.isString(selector) && !isHandler(callback) && callback !== false) {
             callback = selector;
             selector = undefined;
         }
@@ -6561,13 +14961,13 @@ define('skylark-utils-dom/eventer',[
             return this;
         }
 
-        if (!langx.isString(selector) && !langx.isFunction(callback)) {
+        if (!langx.isString(selector) && !isHandler(callback)) {
             callback = data;
             data = selector;
             selector = undefined;
         }
 
-        if (langx.isFunction(data)) {
+        if (isHandler(data)) {
             callback = data;
             data = undefined;
         }
@@ -6766,6 +15166,8 @@ define('skylark-utils-dom/eventer',[
     }
 
     langx.mixin(eventer, {
+        NativeEvents : NativeEvents,
+        
         create: createEvent,
 
         keys: keyCodeLookup,
@@ -6790,14 +15192,101 @@ define('skylark-utils-dom/eventer',[
 
     });
 
-    return dom.eventer = eventer;
+    each(NativeEvents,function(name){
+        eventer[name] = function(elm,selector,data,callback) {
+            if (arguments.length>1) {
+                return this.on(elm,name,selector,data,callback);
+            } else {
+                if (name == "focus") {
+                    if (elm.focus) {
+                        elm.focus();
+                    }
+                } else if (name == "blur") {
+                    if (elm.blur) {
+                        elm.blur();
+                    }
+                } else if (name == "click") {
+                    if (elm.click) {
+                        elm.click();
+                    }
+                } else {
+                    this.trigger(elm,name);
+                }
+
+                return this;
+            }
+        };
+    });
+
+    return skylark.attach("domx.eventer",eventer);
 });
-define('skylark-utils-dom/geom',[
-    "./dom",
-    "./langx",
-    "./noder",
-    "./styler"
-], function(dom, langx, noder, styler) {
+define('skylark-domx-eventer/main',[
+    "skylark-langx/langx",
+    "./eventer",
+    "skylark-domx-velm",
+    "skylark-domx-query"        
+],function(langx,eventer,velm,$){
+
+    var delegateMethodNames = [
+        "off",
+        "on",
+        "one",
+        "trigger"
+    ];
+
+    langx.each(eventer.NativeEvents,function(name){
+        delegateMethodNames.push(name);
+    });
+
+    // from ./eventer
+    velm.delegate(delegateMethodNames, eventer);
+
+    langx.each(delegateMethodNames,function(i,name){
+        $.fn[name] = $.wraps.wrapper_every_act(eventer[name],eventer);
+    });
+
+
+    /*
+    $.fn.on = $.wraps.wrapper_every_act(eventer.on, eventer);
+
+    $.fn.off = $.wraps.wrapper_every_act(eventer.off, eventer);
+
+    $.fn.trigger = $.wraps.wrapper_every_act(eventer.trigger, eventer);
+
+    ('focusin focusout focus blur load resize scroll unload click dblclick ' +
+        'mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave ' +
+        'change select keydown keypress keyup error transitionEnd').split(' ').forEach(function(event) {
+        $.fn[event] = $.wraps.wrapper_every_act(eventer[event],eventer);
+    });
+
+    $.fn.one = function(event, selector, data, callback) {
+        if (!langx.isString(selector) && !langx.isFunction(callback)) {
+            callback = data;
+            data = selector;
+            selector = null;
+        }
+
+        if (langx.isFunction(data)) {
+            callback = data;
+            data = null;
+        }
+
+        return this.on(event, selector, data, callback, 1)
+    }; 
+    */
+
+    $.ready = eventer.ready;
+
+    return eventer;
+});
+define('skylark-domx-eventer', ['skylark-domx-eventer/main'], function (main) { return main; });
+
+define('skylark-domx-geom/geom',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-noder",
+    "skylark-domx-styler"
+], function(skylark, langx, noder, styler) {
     var rootNodeRE = /^(?:body|html)$/i,
         px = langx.toPixel,
         offsetParent = noder.offsetParent,
@@ -6829,6 +15318,8 @@ define('skylark-utils-dom/geom',[
 
         return (cachedScrollbarWidth = w1 - w2);
     }
+
+    
     /*
      * Get the widths of each border of the specified element.
      * @param {HTMLElement} elm
@@ -6882,7 +15373,18 @@ define('skylark-utils-dom/geom',[
      */
     function boundingRect(elm, coords) {
         if (coords === undefined) {
-            return elm.getBoundingClientRect()
+            if (elm == window || elm == document.documentElement || elm == document.body){
+                return {
+                    top : 0,
+                    left : 0,
+                    bottom : window.innerHeight,
+                    right : window.innerWidth,
+                    height : window.innerHeight,
+                    width : window.innerWidth
+                };
+            } else if (elm.getBoundingClientRect) {
+                return elm.getBoundingClientRect();
+            }
         } else {
             boundingPosition(elm, coords);
             size(elm, coords);
@@ -7104,10 +15606,11 @@ define('skylark-utils-dom/geom',[
     //coordinate to the document
     function pagePosition(elm, coords) {
         if (coords === undefined) {
-            var obj = elm.getBoundingClientRect()
+            var obj = elm.getBoundingClientRect(),
+                w = elm.ownerDocument.defaultView;
             return {
-                left: obj.left + window.pageXOffset,
-                top: obj.top + window.pageYOffset
+                left: obj.left + w.pageXOffset,
+                top: obj.top + w.pageYOffset
             }
         } else {
             var // Get *real* offsetParent
@@ -7132,10 +15635,11 @@ define('skylark-utils-dom/geom',[
      */
     function pageRect(elm, coords) {
         if (coords === undefined) {
-            var obj = elm.getBoundingClientRect()
+            var obj = elm.getBoundingClientRect(),
+                w = elm.ownerDocument.defaultView;
             return {
-                left: obj.left + window.pageXOffset,
-                top: obj.top + window.pageYOffset,
+                left: obj.left + w.pageXOffset,
+                top: obj.top + w.pageYOffset,
                 width: Math.round(obj.width),
                 height: Math.round(obj.height)
             }
@@ -7164,8 +15668,8 @@ define('skylark-utils-dom/geom',[
 
             // Subtract parent offsets and element margins
             return {
-                top: offset.top - parentOffset.top - pbex.top, // - mex.top,
-                left: offset.left - parentOffset.left - pbex.left, // - mex.left
+                top: offset.top - parentOffset.top - pbex.top - mex.top,
+                left: offset.left - parentOffset.left - pbex.left - mex.left
             }
         } else {
             var props = {
@@ -7258,6 +15762,9 @@ define('skylark-utils-dom/geom',[
      * @param {Number} value
      */
     function scrollLeft(elm, value) {
+        if (elm.nodeType === 9) {
+            elm = elm.defaultView;
+        }
         var hasScrollLeft = "scrollLeft" in elm;
         if (value === undefined) {
             return hasScrollLeft ? elm.scrollLeft : elm.pageXOffset
@@ -7276,6 +15783,9 @@ define('skylark-utils-dom/geom',[
      * @param {Number} value
      */
     function scrollTop(elm, value) {
+        if (elm.nodeType === 9) {
+            elm = elm.defaultView;
+        }
         var hasScrollTop = "scrollTop" in elm;
 
         if (value === undefined) {
@@ -7289,6 +15799,13 @@ define('skylark-utils-dom/geom',[
             return this;
         }
     }
+
+    function scrollBy(elm, x, y) {
+        elm.scrollLeft += x;
+        elm.scrollTop += y;
+    }
+
+
     /*
      * Get or set the size of the specified element border box.
      * @param {HTMLElement} elm
@@ -7348,6 +15865,44 @@ define('skylark-utils-dom/geom',[
         }
     }
 
+    function testAxis(elm) {
+       
+        var top = elm.offsetTop;
+        var left = elm.offsetLeft;
+        var width = elm.offsetWidth;
+        var height = elm.offsetHeight;
+
+        while(elm.offsetParent) {
+            elm = elm.offsetParent;
+            top += elm.offsetTop;
+            left += elm.offsetLeft;
+        }
+
+        var result = {x: 0, y: 0};
+
+        //Over the top of the window
+        if(top < window.pageYOffset) {
+            result.y = top - window.pageYOffset;
+        }
+        //Bellow the window
+        else if((top + height) > (window.pageYOffset + window.innerHeight))
+        {
+            result.y = (top + height) - (window.pageYOffset + window.innerHeight);
+        }
+
+        //Left to the window
+        if(left < window.pageXOffset) {
+            result.x = left - window.pageXOffset;
+        }
+        //Right to the window
+        else if((left + width) > (window.pageXOffset + window.innerWidth))
+        {
+            result.x = (left + width) - (window.pageXOffset + window.innerWidth);
+        }
+
+        return result;
+    };    
+
     function geom() {
         return geom;
     }
@@ -7399,7 +15954,11 @@ define('skylark-utils-dom/geom',[
 
         scrollTop: scrollTop,
 
+        scrollBy,
+            
         size: size,
+
+        testAxis,
 
         width: width
     });
@@ -7846,16 +16405,166 @@ define('skylark-utils-dom/geom',[
         geom.posit = posit;
     })();
 
-    return dom.geom = geom;
+    return skylark.attach("domx.geom", geom);
 });
-define('skylark-utils-dom/fx',[
-    "./dom",
-    "./langx",
-    "./browser",
+define('skylark-domx-geom/main',[
+    "skylark-langx/langx",
     "./geom",
-    "./styler",
-    "./eventer"
-], function(dom, langx, browser, geom, styler, eventer) {
+    "skylark-domx-velm",
+    "skylark-domx-query"        
+],function(langx,geom,velm,$){
+   // from ./geom
+    velm.delegate([
+        "borderExtents",
+        "boundingPosition",
+        "boundingRect",
+        "clientHeight",
+        "clientSize",
+        "clientWidth",
+        "contentRect",
+        "height",
+        "marginExtents",
+        "marginRect",
+        "marginSize",
+        "offsetParent",
+        "paddingExtents",
+        "pagePosition",
+        "pageRect",
+        "relativePosition",
+        "relativeRect",
+        "scrollIntoView",
+        "scrollLeft",
+        "scrollTop",
+        "size",
+        "width"
+    ], geom);
+
+    $.fn.offset = $.wraps.wrapper_value(geom.pagePosition, geom, geom.pagePosition);
+
+    $.fn.scrollTop = $.wraps.wrapper_value(geom.scrollTop, geom);
+
+    $.fn.scrollLeft = $.wraps.wrapper_value(geom.scrollLeft, geom);
+
+    $.fn.position =  function(options) {
+        if (!this.length) {
+            return this;
+        }
+
+        if (options) {
+            if (options.of && options.of.length) {
+                options = langx.clone(options);
+                options.of = options.of[0];
+            }
+            return this.each( function() {
+                geom.posit(this,options);
+            });
+        } else {
+            var elem = this[0];
+
+            return geom.relativePosition(elem);
+
+        }             
+    };
+
+    $.fn.offsetParent = $.wraps.wrapper_map(geom.offsetParent, geom);
+
+
+    $.fn.size = $.wraps.wrapper_value(geom.size, geom);
+
+    $.fn.width = $.wraps.wrapper_value(geom.width, geom, geom.width);
+
+    $.fn.height = $.wraps.wrapper_value(geom.height, geom, geom.height);
+
+    $.fn.clientSize = $.wraps.wrapper_value(geom.clientSize, geom.clientSize);
+    
+    ['width', 'height'].forEach(function(dimension) {
+        var offset, Dimension = dimension.replace(/./, function(m) {
+            return m[0].toUpperCase()
+        });
+
+        $.fn['outer' + Dimension] = function(margin, value) {
+            if (arguments.length) {
+                if (typeof margin !== 'boolean') {
+                    value = margin;
+                    margin = false;
+                }
+            } else {
+                margin = false;
+                value = undefined;
+            }
+
+            if (value === undefined) {
+                var el = this[0];
+                if (!el) {
+                    return undefined;
+                }
+                var cb = geom.size(el);
+                if (margin) {
+                    var me = geom.marginExtents(el);
+                    cb.width = cb.width + me.left + me.right;
+                    cb.height = cb.height + me.top + me.bottom;
+                }
+                return dimension === "width" ? cb.width : cb.height;
+            } else {
+                return this.each(function(idx, el) {
+                    var mb = {};
+                    var me = geom.marginExtents(el);
+                    if (dimension === "width") {
+                        mb.width = value;
+                        if (margin) {
+                            mb.width = mb.width - me.left - me.right
+                        }
+                    } else {
+                        mb.height = value;
+                        if (margin) {
+                            mb.height = mb.height - me.top - me.bottom;
+                        }
+                    }
+                    geom.size(el, mb);
+                })
+
+            }
+        };
+    })
+
+    $.fn.innerWidth = $.wraps.wrapper_value(geom.clientWidth, geom, geom.clientWidth);
+
+    $.fn.innerHeight = $.wraps.wrapper_value(geom.clientHeight, geom, geom.clientHeight);
+
+    return geom;
+});
+define('skylark-domx-geom', ['skylark-domx-geom/main'], function (main) { return main; });
+
+define('skylark-domx-fx/fx',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx"
+], function(skylark,langx) {
+
+    function fx() {
+        return fx;
+    }
+
+    langx.mixin(fx, {
+        off: false,
+        speeds: {
+            normal: 400,
+            fast: 200,
+            slow: 600
+        }
+    });
+
+    return skylark.attach("domx.fx", fx);
+});
+define('skylark-domx-fx/animate',[
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-noder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-eventer",
+    "./fx"
+], function(langx, browser, noder, geom, styler, eventer,fx) {
+
     var animationName,
         animationDuration,
         animationTiming,
@@ -7882,8 +16591,6 @@ define('skylark-utils-dom/fx',[
         cssReset[transitionDuration = browser.normalizeCssProperty("transition-duration")] =
         cssReset[transitionDelay = browser.normalizeCssProperty("transition-delay")] =
         cssReset[transitionTiming = browser.normalizeCssProperty("transition-timing-function")] = "";
-
-
 
     /*   
      * Perform a custom animation of a set of CSS properties.
@@ -8032,6 +16739,147 @@ define('skylark-utils-dom/fx',[
         return this;
     }
 
+    return fx.animate = animate;
+
+});
+define('skylark-domx-fx/bounce',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,geom,styler,fx,animate) {
+
+    function bounce(elm, options, done ) {
+        var upAnim, downAnim, refValue,
+            // Defaults:
+            mode = options.mode,
+            hide = mode === "hide",
+            show = mode === "show",
+            direction = options.direction || "up",
+            start,
+            distance = options.distance,
+            times = options.times || 5,
+
+            // Number of internal animations
+            anims = times * 2 + ( show || hide ? 1 : 0 ),
+            speed = options.duration / anims,
+            easing = options.easing,
+
+            // Utility:
+            ref = ( direction === "up" || direction === "down" ) ? "top" : "left",
+            motion = ( direction === "up" || direction === "left" ),
+            i = 0;
+
+        //createPlaceholder(elm);
+
+        var Deferred = langx.Deferred;
+        var funcs = [];
+
+        refValue = styler.css(elm,ref );
+
+        // Default distance for the BIGGEST bounce is the outer Distance / 3
+        if ( !distance ) {
+            var msize = geom.size(elm);
+            distance = (ref === "top" ? msize.height : msize.width) / 3;
+        }
+
+        start = geom.relativePosition(elm)[ref];
+
+        if ( show ) {
+            downAnim = { opacity: 1 };
+            downAnim[ ref ] = refValue;
+
+            // If we are showing, force opacity 0 and set the initial position
+            // then do the "first" animation
+            styler.css(elm, "opacity", 0 );
+            styler.css(elm, ref, start + (motion ? -distance * 2 : distance * 2 ));
+
+            funcs.push(doAnimate(elm,downAnim, speed, easing));
+        }
+
+        // Start at the smallest distance if we are hiding
+        if ( hide ) {
+            distance = distance / Math.pow( 2, times - 1 );
+        }
+
+        downAnim = {};
+        downAnim[ ref ] = refValue;
+
+
+        function doAnimate(elm,properties, duration, easing) {
+            return function() {
+                var d = new Deferred();
+
+                animate(elm,properties, duration, easing ,function(){
+                    d.resolve();
+                });
+                return d.promise;
+
+            }
+        }
+
+        // Bounces up/down/left/right then back to 0 -- times * 2 animations happen here
+        for ( ; i < times; i++ ) {
+            upAnim = {};
+            upAnim[ ref ] = start + ( motion ? -distance : distance) ;
+
+            funcs.push(doAnimate(elm,upAnim, speed, easing));
+
+            funcs.push(doAnimate(elm,downAnim, speed, easing));
+
+            distance = hide ? distance * 2 : distance / 2;
+        }
+
+        // Last Bounce when Hiding
+        if ( hide ) {
+            upAnim = { opacity: 0 };
+            upAnim[ ref ] = start + ( motion ? -1 * distance : distance) ;
+
+            funcs.push(doAnimate(elm,upAnim, speed, easing ));
+        }
+
+        funcs.push(done);
+        funcs.reduce(function(prev, curr, index, array) {
+            return prev.then(curr);
+        }, Deferred.resolve());
+
+        return this;
+    } 
+
+    return fx.bounce = bounce;
+});
+define('skylark-domx-fx/emulateTransitionEnd',[
+    "skylark-langx/langx",
+    "skylark-domx-eventer",
+    "./fx"
+],function(langx,eventer,fx) {
+    
+    function emulateTransitionEnd(elm,duration) {
+        var called = false;
+        eventer.one(elm,'transitionEnd', function () { 
+            called = true;
+        })
+        var callback = function () { 
+            if (!called) {
+                eventer.trigger(elm,browser.support.transition.end) 
+            }
+        };
+        setTimeout(callback, duration);
+        
+        return this;
+    } 
+
+
+
+    return fx.emulateTransitionEnd = emulateTransitionEnd;
+});
+define('skylark-domx-fx/show',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,styler,fx,animate) {
     /*   
      * Display an element.
      * @param {Object} elm  
@@ -8051,7 +16899,14 @@ define('skylark-utils-dom/fx',[
         return this;
     }
 
-
+    return fx.show = show;
+});
+define('skylark-domx-fx/hide',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,styler,fx,animate) {
     /*   
      * Hide an element.
      * @param {Object} elm  
@@ -8076,47 +16931,111 @@ define('skylark-utils-dom/fx',[
         return this;
     }
 
-    /*   
-     * Set the vertical position of the scroll bar for an element.
-     * @param {Object} elm  
-     * @param {Number or String} pos
-     * @param {Number or String} speed
-     * @param {Function} callback
-     */
-    function scrollToTop(elm, pos, speed, callback) {
-        var scrollFrom = parseInt(elm.scrollTop),
-            i = 0,
-            runEvery = 5, // run every 5ms
-            freq = speed * 1000 / runEvery,
-            scrollTo = parseInt(pos);
+    return fx.hide = hide;
+});
+define('skylark-domx-fx/explode',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "skylark-domx-geom",
+    "skylark-domx-noder",
+    "skylark-domx-query",
+    "./fx",
+    "./animate",
+    "./show",
+    "./hide"
+],function(langx,styler,geom,noder,$,fx,animate,show,hide) {
 
-        var interval = setInterval(function() {
-            i++;
+    function explode( elm,options, done ) {
 
-            if (i <= freq) elm.scrollTop = (scrollTo - scrollFrom) / freq * i + scrollFrom;
+		// Show and then visibility:hidden the element before calculating offset
+		styler.show(elm);
+		styler.css(elm, "visibility", "hidden" );
 
-            if (i >= freq + 1) {
-                clearInterval(interval);
-                if (callback) langx.debounce(callback, 1000)();
-            }
-        }, runEvery);
-    }
+		var i, j, left, top, mx, my,
+			rows = options.pieces ? Math.round( Math.sqrt( options.pieces ) ) : 3,
+			cells = rows,
+			mode = options.mode,
+			show = mode === "show",
+			offset = geom.pagePosition(elm),
 
-    /*   
-     * Display or hide an element.
-     * @param {Object} elm  
-     * @param {Number or String} speed
-     * @param {Function} callback
-     */
-    function toggle(elm, speed, callback) {
-        if (styler.isInvisible(elm)) {
-            show(elm, speed, callback);
-        } else {
-            hide(elm, speed, callback);
-        }
-        return this;
-    }
+			// Width and height of a piece
+			size = geom.marginSize(elm),
+			width = Math.ceil( size.width / cells ),
+			height = Math.ceil( size.height / rows ),
+			pieces = [];
 
+		// Children animate complete:
+		function childComplete() {
+			pieces.push( this );
+			if ( pieces.length === rows * cells ) {
+				animComplete();
+			}
+		}
+
+		// Clone the element for each row and cell.
+		for ( var i = 0; i < rows; i++ ) { // ===>
+			top = offset.top + i * height;
+			my = i - ( rows - 1 ) / 2;
+
+			for ( j = 0; j < cells; j++ ) { // |||
+				left = offset.left + j * width;
+				mx = j - ( cells - 1 ) / 2;
+
+				// Create a clone of the now hidden main element that will be absolute positioned
+				// within a wrapper div off the -left and -top equal to size of our pieces
+				$(elm)
+					.clone()
+					.appendTo( "body" )
+					.wrap( "<div></div>" )
+					.css( {
+						position: "absolute",
+						visibility: "visible",
+						left: -j * width,
+						top: -i * height
+					} )
+
+					// Select the wrapper - make it overflow: hidden and absolute positioned based on
+					// where the original was located +left and +top equal to the size of pieces
+					.parent()
+						.addClass( options.explodeClass || "ui-effects-explode" )
+						.css( {
+							position: "absolute",
+							overflow: "hidden",
+							width: width,
+							height: height,
+							left: left + ( show ? mx * width : 0 ),
+							top: top + ( show ? my * height : 0 ),
+							opacity: show ? 0 : 1
+						} )
+						.animate( {
+							left: left + ( show ? 0 : mx * width ),
+							top: top + ( show ? 0 : my * height ),
+							opacity: show ? 1 : 0
+						}, options.duration || 500, options.easing, childComplete );
+			}
+		}
+
+		function animComplete() {
+			styler.css(elm, {
+				visibility: "visible"
+			} );
+			$( pieces ).remove();
+			done();
+		}
+
+		return this;
+	}
+
+
+	return fx.explode = explode;
+});
+
+define('skylark-domx-fx/fade',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,styler,fx,animate) {
     /*   
      * Adjust the opacity of an element.
      * @param {Object} elm  
@@ -8125,20 +17044,34 @@ define('skylark-utils-dom/fx',[
      * @param {String} easing
      * @param {Function} callback
      */
-    function fadeTo(elm, speed, opacity, easing, callback) {
-        animate(elm, { opacity: opacity }, speed, easing, callback);
+    function fade(elm, opacity,options, callback) {
+        if (langx.isFunction(options)) {
+            callback = options;
+            options = {};
+        }
+        options = options || {};
+        
+        animate(elm, { opacity: opacity }, options.duration, options.easing, callback);
         return this;
     }
 
 
+    return fx.fade = fade;
+});
+define('skylark-domx-fx/fadeIn',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./fade"
+],function(langx,styler,fx,fadeTo) {
     /*   
      * Display an element by fading them to opaque.
      * @param {Object} elm  
-     * @param {Number or String} speed
+     * @param {Number or String} duration
      * @param {String} easing
      * @param {Function} callback
      */
-    function fadeIn(elm, speed, easing, callback) {
+    function fadeIn(elm, options, callback) {
         var target = styler.css(elm, "opacity");
         if (target > 0) {
             styler.css(elm, "opacity", 0);
@@ -8147,49 +17080,51 @@ define('skylark-utils-dom/fx',[
         }
         styler.show(elm);
 
-        fadeTo(elm, speed, target, easing, callback);
+        fadeTo(elm,  target,options, callback);
 
         return this;
     }
 
+
+    return fx.fadeIn = fadeIn;
+});
+define('skylark-domx-fx/fadeOut',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./fade"
+],function(langx,styler,fx,fadeTo) {
     /*   
      * Hide an element by fading them to transparent.
      * @param {Object} elm  
-     * @param {Number or String} speed
+     * @param {Number or String} duration
      * @param {String} easing
      * @param {Function} callback
      */
-    function fadeOut(elm, speed, easing, callback) {
-        var _elm = elm,
-            complete,
-            opacity = styler.css(elm,"opacity"),
-            options = {};
+    function fadeOut(elm, options, callback) {
 
-        if (langx.isPlainObject(speed)) {
-            options.easing = speed.easing;
-            options.duration = speed.duration;
-            complete = speed.complete;
-        } else {
-            options.duration = speed;
-            if (callback) {
-                complete = callback;
-                options.easing = easing;
-            } else {
-                complete = easing;
-            }
-        }
-        options.complete = function() {
+        function complete() {
             styler.css(elm,"opacity",opacity);
             styler.hide(elm);
-            if (complete) {
-                complete.call(elm);
+            if (callback) {
+                callback.call(elm);
             }
         }
 
-        fadeTo(elm, options, 0);
+        fadeTo(elm, 0,options,callback);
 
         return this;
     }
+
+    return fx.fadeOut = fadeOut;
+});
+define('skylark-domx-fx/fadeToggle',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./fadeIn",
+    "./fadeOut"
+],function(langx,styler,fx,fadeIn,fadeOut) {
 
     /*   
      * Display or hide an element by animating its opacity.
@@ -8198,7 +17133,7 @@ define('skylark-utils-dom/fx',[
      * @param {String} ceasing
      * @param {Function} callback
      */
-    function fadeToggle(elm, speed, ceasing, allback) {
+    function fadeToggle(elm, speed, easing, callback) {
         if (styler.isInvisible(elm)) {
             fadeIn(elm, speed, easing, callback);
         } else {
@@ -8207,6 +17142,347 @@ define('skylark-utils-dom/fx',[
         return this;
     }
 
+
+    return fx.fadeToggle = fadeToggle;
+});
+define('skylark-domx-fx/pulsate',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,geom,styler,fx,animate) {
+
+	function pulsate(elm, options, done ) {
+		var 
+			mode = options.mode,
+			show = mode === "show" || !mode,
+			hide = mode === "hide",
+			showhide = show || hide,
+
+			// Showing or hiding leaves off the "last" animation
+			anims = ( ( options.times || 5 ) * 2 ) + ( showhide ? 1 : 0 ),
+			duration = options.duration / anims,
+			animateTo = 0,
+			i = 1;
+
+		if ( show || styler.isInvisible(elm) ) {
+			styler.css(elm, "opacity", 0 );
+			styler.show(elm);
+			animateTo = 1;
+		}
+
+		// Anims - 1 opacity "toggles"
+
+		var Deferred = langx.Deferred;
+		var funcs = [];
+
+		function doAnimate(elm,properties, duration, ease) {
+			return function() {
+				var d = new Deferred();
+
+				animate( elm,properties, duration, ease ,function(){
+					d.resolve();
+				});
+				return d.promise;
+
+			}
+		}
+
+
+		for ( ; i < anims; i++ ) {
+			funcs.push(doAnimate(elm,{ opacity: animateTo }, duration, options.easing ));
+			animateTo = 1 - animateTo;
+		}
+
+	    funcs.push(doAnimate(elm,{ opacity: animateTo }, duration, options.easing ));
+
+		funcs.push(done);
+		funcs.reduce(function(prev, curr, index, array) {
+	  		return prev.then(curr);
+		}, Deferred.resolve());
+
+		return this;
+
+	}
+
+	return fx.pulsate = pulsate;
+
+});
+
+define('skylark-domx-fx/shake',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,geom,styler,fx,animate) {
+	function shake(elm, options, done ) {
+
+		var i = 1,
+			direction = options.direction || "left",
+			distance = options.distance || 20,
+			times = options.times || 3,
+			anims = times * 2 + 1,
+			speed = Math.round( options.duration / anims ),
+			ref = ( direction === "up" || direction === "down" ) ? "top" : "left",
+			positiveMotion = ( direction === "up" || direction === "left" ),
+			animation0 = {},
+			animation = {},
+			animation1 = {},
+			animation2 = {};
+
+		var Deferred = langx.Deferred;
+			start = geom.relativePosition(elm)[ref],
+			funcs = [];
+
+		function doAnimate(elm,properties, duration, ease) {
+			return function() {
+				var d = new Deferred();
+
+				animate(elm, properties, duration, ease ,function(){
+					d.resolve();
+				});
+				return d.promise;
+			}
+		}
+
+		// Animation
+		animation0[ ref ] = start;
+		animation[ ref ] = start + ( positiveMotion ? -1 : 1 ) * distance;
+		animation1[ ref ] = animation[ ref ] + ( positiveMotion ? 1 : -1 ) * distance * 2;
+		animation2[ ref ] = animation1[ ref ] + ( positiveMotion ? -1 : 1 ) * distance * 2;
+
+		// Animate
+	    funcs.push(doAnimate(elm,animation, speed, options.easing ));
+
+		// Shakes
+		for ( ; i < times; i++ ) {
+		    funcs.push(doAnimate(elm,animation1, speed, options.easing ));
+		    funcs.push(doAnimate(elm,animation2, speed, options.easing ));
+		}
+
+	    funcs.push(doAnimate(elm,animation0, speed /2 , options.easing ));
+
+		funcs.push(done);
+		funcs.reduce(function(prev, curr, index, array) {
+	  		return prev.then(curr);
+		}, Deferred.resolve());
+
+		return this;
+	}
+
+	return fx.shake = shake;
+
+});
+
+define('skylark-domx-fx/slide',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./animate"
+],function(langx,styler,fx,animate) {
+
+    function slide(elm,options,callback ) {
+    	if (langx.isFunction(options)) {
+    		callback = options;
+    		options = {};
+    	}
+    	options = options || {};
+		var direction = options.direction || "down",
+			isHide = ( direction === "up" || direction === "left" ),
+			isVert = ( direction === "up" || direction === "down" ),
+			duration = options.duration || fx.speeds.normal;
+
+
+        // get the element position to restore it then
+        var position = styler.css(elm, 'position');
+
+        if (isHide) {
+            // active the function only if the element is visible
+        	if (styler.isInvisible(elm)) {
+        		return this;
+        	}
+        } else {
+	        // show element if it is hidden
+	        styler.show(elm);        	
+	        // place it so it displays as usually but hidden
+	        styler.css(elm, {
+	            position: 'absolute',
+	            visibility: 'hidden'
+	        });
+        }
+
+
+
+        if (isVert) { // up--down
+	        // get naturally height, margin, padding
+	        var marginTop = styler.css(elm, 'margin-top');
+	        var marginBottom = styler.css(elm, 'margin-bottom');
+	        var paddingTop = styler.css(elm, 'padding-top');
+	        var paddingBottom = styler.css(elm, 'padding-bottom');
+	        var height = styler.css(elm, 'height');
+
+	        if (isHide) {  	// slideup
+	            // set initial css for animation
+	            styler.css(elm, {
+	                visibility: 'visible',
+	                overflow: 'hidden',
+	                height: height,
+	                marginTop: marginTop,
+	                marginBottom: marginBottom,
+	                paddingTop: paddingTop,
+	                paddingBottom: paddingBottom
+	            });
+
+	            // animate element height, margin and padding to zero
+	            animate(elm, {
+	                height: 0,
+	                marginTop: 0,
+	                marginBottom: 0,
+	                paddingTop: 0,
+	                paddingBottom: 0
+	            }, {
+	                // callback : restore the element position, height, margin and padding to original values
+	                duration: duration,
+	                queue: false,
+	                complete: function() {
+	                    styler.hide(elm);
+	                    styler.css(elm, {
+	                        visibility: 'visible',
+	                        overflow: 'hidden',
+	                        height: height,
+	                        marginTop: marginTop,
+	                        marginBottom: marginBottom,
+	                        paddingTop: paddingTop,
+	                        paddingBottom: paddingBottom
+	                    });
+	                    if (callback) {
+	                        callback.apply(elm);
+	                    }
+	                }
+	            });
+	        } else {     	// slidedown
+		        // set initial css for animation
+		        styler.css(elm, {
+		            position: position,
+		            visibility: 'visible',
+		            overflow: 'hidden',
+		            height: 0,
+		            marginTop: 0,
+		            marginBottom: 0,
+		            paddingTop: 0,
+		            paddingBottom: 0
+		        });
+
+		        // animate to gotten height, margin and padding
+		        animate(elm, {
+		            height: height,
+		            marginTop: marginTop,
+		            marginBottom: marginBottom,
+		            paddingTop: paddingTop,
+		            paddingBottom: paddingBottom
+		        }, {
+		            duration: duration,
+		            complete: function() {
+		                if (callback) {
+		                    callback.apply(elm);
+		                }
+		            }
+		        });
+
+	        }
+
+        } else { // left--right
+	        // get naturally height, margin, padding
+	        var marginLeft = styler.css(elm, 'margin-left');
+	        var marginRight = styler.css(elm, 'margin-right');
+	        var paddingLeft = styler.css(elm, 'padding-left');
+	        var paddingRight = styler.css(elm, 'padding-right');
+	        var width = styler.css(elm, 'width');
+
+	        if (isHide) {  	// slideleft
+	            // set initial css for animation
+	            styler.css(elm, {
+	                visibility: 'visible',
+	                overflow: 'hidden',
+	                width: width,
+	                marginLeft: marginLeft,
+	                marginRight: marginRight,
+	                paddingLeft: paddingLeft,
+	                paddingRight: paddingRight
+	            });
+
+	            // animate element height, margin and padding to zero
+	            animate(elm, {
+	                width: 0,
+	                marginLeft: 0,
+	                marginRight: 0,
+	                paddingLeft: 0,
+	                paddingRight: 0
+	            }, {
+	                // callback : restore the element position, height, margin and padding to original values
+	                duration: duration,
+	                queue: false,
+	                complete: function() {
+	                    styler.hide(elm);
+	                    styler.css(elm, {
+	                        visibility: 'visible',
+	                        overflow: 'hidden',
+	                        width: width,
+	                        marginLeft: marginLeft,
+	                        marginRight: marginRight,
+	                        paddingLeft: paddingLeft,
+	                        paddingRight: paddingRight
+	                    });
+	                    if (callback) {
+	                        callback.apply(elm);
+	                    }
+	                }
+	            });
+	        } else {     	// slideright
+		        // set initial css for animation
+		        styler.css(elm, {
+		            position: position,
+		            visibility: 'visible',
+		            overflow: 'hidden',
+		            width: 0,
+		            marginLeft: 0,
+		            marginRight: 0,
+		            paddingLeft: 0,
+		            paddingRight: 0
+		        });
+
+		        // animate to gotten width, margin and padding
+		        animate(elm, {
+		            width: width,
+		            marginLeft: marginLeft,
+		            marginRight: marginRight,
+		            paddingLeft: paddingLeft,
+		            paddingRight: paddingRight
+		        }, {
+		            duration: duration,
+		            complete: function() {
+		                if (callback) {
+		                    callback.apply(elm);
+		                }
+		            }
+		        });
+
+	        }       	
+        }
+
+        return this;
+    }
+
+    return fx.slide = slide;
+
+});
+
+define('skylark-domx-fx/slideDown',[
+    "./fx",
+    "./slide"
+],function(fx,slide) {
     /*   
      * Display an element with a sliding motion.
      * @param {Object} elm  
@@ -8214,57 +17490,18 @@ define('skylark-utils-dom/fx',[
      * @param {Function} callback
      */
     function slideDown(elm, duration, callback) {
-
-        // get the element position to restore it then
-        var position = styler.css(elm, 'position');
-
-        // show element if it is hidden
-        show(elm);
-
-        // place it so it displays as usually but hidden
-        styler.css(elm, {
-            position: 'absolute',
-            visibility: 'hidden'
-        });
-
-        // get naturally height, margin, padding
-        var marginTop = styler.css(elm, 'margin-top');
-        var marginBottom = styler.css(elm, 'margin-bottom');
-        var paddingTop = styler.css(elm, 'padding-top');
-        var paddingBottom = styler.css(elm, 'padding-bottom');
-        var height = styler.css(elm, 'height');
-
-        // set initial css for animation
-        styler.css(elm, {
-            position: position,
-            visibility: 'visible',
-            overflow: 'hidden',
-            height: 0,
-            marginTop: 0,
-            marginBottom: 0,
-            paddingTop: 0,
-            paddingBottom: 0
-        });
-
-        // animate to gotten height, margin and padding
-        animate(elm, {
-            height: height,
-            marginTop: marginTop,
-            marginBottom: marginBottom,
-            paddingTop: paddingTop,
-            paddingBottom: paddingBottom
-        }, {
-            duration: duration,
-            complete: function() {
-                if (callback) {
-                    callback.apply(elm);
-                }
-            }
-        });
-
-        return this;
+        return slide(elm,{
+            direction : "down",
+            duration : duration
+        },callback);
     }
 
+    return fx.slideDown = slideDown;
+});
+define('skylark-domx-fx/slideUp',[
+    "./fx",
+    "./slide"
+],function(fx,slide) {
     /*   
      * Hide an element with a sliding motion.
      * @param {Object} elm  
@@ -8272,61 +17509,23 @@ define('skylark-utils-dom/fx',[
      * @param {Function} callback
      */
     function slideUp(elm, duration, callback) {
-        // active the function only if the element is visible
-        if (geom.height(elm) > 0) {
-
-            // get the element position to restore it then
-            var position = styler.css(elm, 'position');
-
-            // get the element height, margin and padding to restore them then
-            var height = styler.css(elm, 'height');
-            var marginTop = styler.css(elm, 'margin-top');
-            var marginBottom = styler.css(elm, 'margin-bottom');
-            var paddingTop = styler.css(elm, 'padding-top');
-            var paddingBottom = styler.css(elm, 'padding-bottom');
-
-            // set initial css for animation
-            styler.css(elm, {
-                visibility: 'visible',
-                overflow: 'hidden',
-                height: height,
-                marginTop: marginTop,
-                marginBottom: marginBottom,
-                paddingTop: paddingTop,
-                paddingBottom: paddingBottom
-            });
-
-            // animate element height, margin and padding to zero
-            animate(elm, {
-                height: 0,
-                marginTop: 0,
-                marginBottom: 0,
-                paddingTop: 0,
-                paddingBottom: 0
-            }, {
-                // callback : restore the element position, height, margin and padding to original values
-                duration: duration,
-                queue: false,
-                complete: function() {
-                    hide(elm);
-                    styler.css(elm, {
-                        visibility: 'visible',
-                        overflow: 'hidden',
-                        height: height,
-                        marginTop: marginTop,
-                        marginBottom: marginBottom,
-                        paddingTop: paddingTop,
-                        paddingBottom: paddingBottom
-                    });
-                    if (callback) {
-                        callback.apply(elm);
-                    }
-                }
-            });
-        }
-        return this;
+        return slide(elm,{
+            direction : "up",
+            duration : duration
+        },callback);
     }
 
+
+
+    return fx.slideUp = slideUp;
+});
+define('skylark-domx-fx/slideToggle',[
+    "skylark-langx/langx",
+    "skylark-domx-geom",
+    "./fx",
+    "./slideDown",
+    "./slideUp"
+],function(langx,geom,fx,slideDown,slideUp) {
 
     /*   
      * Display or hide an element with a sliding motion.
@@ -8347,1304 +17546,194 @@ define('skylark-utils-dom/fx',[
         return this;
     }
 
-    function emulateTransitionEnd(elm,duration) {
-        var called = false;
-        eventer.one(elm,'transitionEnd', function () { 
-            called = true;
-        })
-        var callback = function () { 
-            if (!called) {
-                eventer.trigger(elm,'transitionEnd') 
-            }
-        };
-        setTimeout(callback, duration);
-        
-        return this;
-    } 
-
-    function fx() {
-        return fx;
-    }
-
-    langx.mixin(fx, {
-        off: false,
-
-        speeds: {
-            normal: 400,
-            fast: 200,
-            slow: 600
-        },
-
-        animate,
-        emulateTransitionEnd,
-        fadeIn,
-        fadeOut,
-        fadeTo,
-        fadeToggle,
-        hide,
-        scrollToTop,
-
-        slideDown,
-        slideToggle,
-        slideUp,
-        show,
-        toggle
-    });
-
-    return dom.fx = fx;
+    return fx.slideToggle = slideToggle;
 });
-define('skylark-utils-dom/query',[
-    "./dom",
-    "./langx",
-    "./noder",
-    "./datax",
-    "./eventer",
-    "./finder",
-    "./geom",
-    "./styler",
-    "./fx"
-], function(dom, langx, noder, datax, eventer, finder, geom, styler, fx) {
-    var some = Array.prototype.some,
-        push = Array.prototype.push,
-        every = Array.prototype.every,
-        concat = Array.prototype.concat,
-        slice = Array.prototype.slice,
-        map = Array.prototype.map,
-        filter = Array.prototype.filter,
-        forEach = Array.prototype.forEach,
-        indexOf = Array.prototype.indexOf,
-        sort = Array.prototype.sort,
-        isQ;
-
-    var rquickExpr = /^(?:[^#<]*(<[\w\W]+>)[^>]*$|#([\w\-]*)$)/;
-
-    var funcArg = langx.funcArg,
-        isArrayLike = langx.isArrayLike,
-        isString = langx.isString,
-        uniq = langx.uniq,
-        isFunction = langx.isFunction;
-
-    var type = langx.type,
-        isArray = langx.isArray,
-
-        isWindow = langx.isWindow,
-
-        isDocument = langx.isDocument,
-
-        isObject = langx.isObject,
-
-        isPlainObject = langx.isPlainObject,
-
-        compact = langx.compact,
-
-        flatten = langx.flatten,
-
-        camelCase = langx.camelCase,
-
-        dasherize = langx.dasherize,
-        children = finder.children;
-
-    function wrapper_map(func, context) {
-        return function() {
-            var self = this,
-                params = slice.call(arguments);
-            var result = langx.map(self, function(elem, idx) {
-                return func.apply(context, [elem].concat(params));
-            });
-            return query(uniq(result));
-        }
-    }
-
-    function wrapper_selector(func, context, last) {
-        return function(selector) {
-            var self = this,
-                params = slice.call(arguments);
-            var result = this.map(function(idx, elem) {
-                // if (elem.nodeType == 1) {
-                if (elem.querySelector) {
-                    return func.apply(context, last ? [elem] : [elem, selector]);
-                }
-            });
-            if (last && selector) {
-                return result.filter(selector);
-            } else {
-                return result;
-            }
-        }
-    }
-
-    function wrapper_selector_until(func, context, last) {
-        return function(util, selector) {
-            var self = this,
-                params = slice.call(arguments);
-            if (selector === undefined) {
-                selector = util;
-                util = undefined;
-            }
-            var result = this.map(function(idx, elem) {
-                // if (elem.nodeType == 1) {
-                if (elem.querySelector) {
-                    return func.apply(context, last ? [elem, util] : [elem, selector, util]);
-                }
-            });
-            if (last && selector) {
-                return result.filter(selector);
-            } else {
-                return result;
-            }
-        }
-    }
-
-
-    function wrapper_every_act(func, context) {
-        return function() {
-            var self = this,
-                params = slice.call(arguments);
-            this.each(function(idx) {
-                func.apply(context, [this].concat(params));
-            });
-            return self;
-        }
-    }
-
-    function wrapper_every_act_firstArgFunc(func, context, oldValueFunc) {
-        return function(arg1) {
-            var self = this,
-                params = slice.call(arguments);
-            forEach.call(self, function(elem, idx) {
-                var newArg1 = funcArg(elem, arg1, idx, oldValueFunc(elem));
-                func.apply(context, [elem, arg1].concat(params.slice(1)));
-            });
-            return self;
-        }
-    }
-
-    function wrapper_some_chk(func, context) {
-        return function() {
-            var self = this,
-                params = slice.call(arguments);
-            return some.call(self, function(elem) {
-                return func.apply(context, [elem].concat(params));
-            });
-        }
-    }
-
-    function wrapper_name_value(func, context, oldValueFunc) {
-        return function(name, value) {
-            var self = this,
-                params = slice.call(arguments);
-
-            if (langx.isPlainObject(name) || langx.isDefined(value)) {
-                forEach.call(self, function(elem, idx) {
-                    var newValue;
-                    if (oldValueFunc) {
-                        newValue = funcArg(elem, value, idx, oldValueFunc(elem, name));
-                    } else {
-                        newValue = value
-                    }
-                    func.apply(context, [elem].concat(params));
-                });
-                return self;
-            } else {
-                if (self[0]) {
-                    return func.apply(context, [self[0], name]);
-                }
-            }
-
-        }
-    }
-
-    function wrapper_value(func, context, oldValueFunc) {
-        return function(value) {
-            var self = this;
-
-            if (langx.isDefined(value)) {
-                forEach.call(self, function(elem, idx) {
-                    var newValue;
-                    if (oldValueFunc) {
-                        newValue = funcArg(elem, value, idx, oldValueFunc(elem));
-                    } else {
-                        newValue = value
-                    }
-                    func.apply(context, [elem, newValue]);
-                });
-                return self;
-            } else {
-                if (self[0]) {
-                    return func.apply(context, [self[0]]);
-                }
-            }
-
-        }
-    }
-
-    var NodeList = langx.klass({
-        klassName: "SkNodeList",
-        init: function(selector, context) {
-            var self = this,
-                match, nodes, node, props;
-
-            if (selector) {
-                self.context = context = context || noder.doc();
-
-                if (isString(selector)) {
-                    // a html string or a css selector is expected
-                    self.selector = selector;
-
-                    if (selector.charAt(0) === "<" && selector.charAt(selector.length - 1) === ">" && selector.length >= 3) {
-                        match = [null, selector, null];
-                    } else {
-                        match = rquickExpr.exec(selector);
-                    }
-
-                    if (match) {
-                        if (match[1]) {
-                            // if selector is html
-                            nodes = noder.createFragment(selector);
-
-                            if (langx.isPlainObject(context)) {
-                                props = context;
-                            }
-
-                        } else {
-                            node = finder.byId(match[2], noder.ownerDoc(context));
-
-                            if (node) {
-                                // if selector is id
-                                nodes = [node];
-                            }
-
-                        }
-                    } else {
-                        // if selector is css selector
-                        if (langx.isString(context)) {
-                            context = finder.find(context);
-                        }
-
-                        nodes = finder.descendants(context, selector);
-                    }
-                } else {
-                    if (selector !== window && isArrayLike(selector)) {
-                        // a dom node array is expected
-                        nodes = selector;
-                    } else {
-                        // a dom node is expected
-                        nodes = [selector];
-                    }
-                    //self.add(selector, false);
-                }
-            }
-
-
-            if (nodes) {
-
-                push.apply(self, nodes);
-
-                if (props) {
-                    for ( var name  in props ) {
-                        // Properties of context are called as methods if possible
-                        if ( langx.isFunction( this[ name ] ) ) {
-                            this[ name ]( props[ name ] );
-                        } else {
-                            this.attr( name, props[ name ] );
-                        }
-                    }
-                }
-            }
-
-            return self;
-        }
-    });
-
-    var query = (function() {
-        isQ = function(object) {
-            return object instanceof NodeList;
-        }
-        init = function(selector, context) {
-            return new NodeList(selector, context);
-        }
-
-        var $ = function(selector, context) {
-            if (isFunction(selector)) {
-                eventer.ready(function() {
-                    selector($);
-                });
-            } else if (isQ(selector)) {
-                return selector;
-            } else {
-                if (context && isQ(context) && isString(selector)) {
-                    return context.find(selector);
-                }
-                return init(selector, context);
-            }
-        };
-
-        $.fn = NodeList.prototype;
-        langx.mixin($.fn, {
-            // `map` and `slice` in the jQuery API work differently
-            // from their array counterparts
-            length : 0,
-
-            map: function(fn) {
-                return $(uniq(langx.map(this, function(el, i) {
-                    return fn.call(el, i, el)
-                })));
-            },
-
-            slice: function() {
-                return $(slice.apply(this, arguments))
-            },
-
-            forEach: function() {
-                return forEach.apply(this,arguments);
-            },
-
-            get: function(idx) {
-                return idx === undefined ? slice.call(this) : this[idx >= 0 ? idx : idx + this.length]
-            },
-
-            indexOf: function() {
-                return indexOf.apply(this,arguments);
-            },
-
-            sort : function() {
-                return sort.apply(this,arguments);
-            },
-
-            toArray: function() {
-                return slice.call(this);
-            },
-
-            size: function() {
-                return this.length
-            },
-
-            remove: wrapper_every_act(noder.remove, noder),
-
-            each: function(callback) {
-                langx.each(this, callback);
-                return this;
-            },
-
-            filter: function(selector) {
-                if (isFunction(selector)) return this.not(this.not(selector))
-                return $(filter.call(this, function(element) {
-                    return finder.matches(element, selector)
-                }))
-            },
-
-            add: function(selector, context) {
-                return $(uniq(this.toArray().concat($(selector, context).toArray())));
-            },
-
-            is: function(selector) {
-                if (this.length > 0) {
-                    var self = this;
-                    if (langx.isString(selector)) {
-                        return some.call(self,function(elem) {
-                            return finder.matches(elem, selector);
-                        });
-                    } else if (langx.isArrayLike(selector)) {
-                       return some.call(self,function(elem) {
-                            return langx.inArray(elem, selector) > -1;
-                        });
-                    } else if (langx.isHtmlNode(selector)) {
-                       return some.call(self,function(elem) {
-                            return elem ==  selector;
-                        });
-                    }
-                }
-                return false;
-            },
-            
-            not: function(selector) {
-                var nodes = []
-                if (isFunction(selector) && selector.call !== undefined)
-                    this.each(function(idx) {
-                        if (!selector.call(this, idx)) nodes.push(this)
-                    })
-                else {
-                    var excludes = typeof selector == 'string' ? this.filter(selector) :
-                        (isArrayLike(selector) && isFunction(selector.item)) ? slice.call(selector) : $(selector)
-                    this.forEach(function(el) {
-                        if (excludes.indexOf(el) < 0) nodes.push(el)
-                    })
-                }
-                return $(nodes)
-            },
-
-            has: function(selector) {
-                return this.filter(function() {
-                    return isObject(selector) ?
-                        noder.contains(this, selector) :
-                        $(this).find(selector).size()
-                })
-            },
-
-            eq: function(idx) {
-                return idx === -1 ? this.slice(idx) : this.slice(idx, +idx + 1);
-            },
-
-            first: function() {
-                return this.eq(0);
-            },
-
-            last: function() {
-                return this.eq(-1);
-            },
-
-            find: wrapper_selector(finder.descendants, finder),
-
-            closest: wrapper_selector(finder.closest, finder),
-            /*
-                        closest: function(selector, context) {
-                            var node = this[0],
-                                collection = false
-                            if (typeof selector == 'object') collection = $(selector)
-                            while (node && !(collection ? collection.indexOf(node) >= 0 : finder.matches(node, selector)))
-                                node = node !== context && !isDocument(node) && node.parentNode
-                            return $(node)
-                        },
-            */
-
-
-            parents: wrapper_selector(finder.ancestors, finder),
-
-            parentsUntil: wrapper_selector_until(finder.ancestors, finder),
-
-
-            parent: wrapper_selector(finder.parent, finder),
-
-            children: wrapper_selector(finder.children, finder),
-
-            contents: wrapper_map(noder.contents, noder),
-
-            empty: wrapper_every_act(noder.empty, noder),
-
-            // `pluck` is borrowed from Prototype.js
-            pluck: function(property) {
-                return langx.map(this, function(el) {
-                    return el[property]
-                })
-            },
-
-            pushStack : function(elms) {
-                var ret = $(elms);
-                ret.prevObject = this;
-                return ret;
-            },
-            
-            replaceWith: function(newContent) {
-                return this.before(newContent).remove();
-            },
-
-            wrap: function(structure) {
-                var func = isFunction(structure)
-                if (this[0] && !func)
-                    var dom = $(structure).get(0),
-                        clone = dom.parentNode || this.length > 1
-
-                return this.each(function(index) {
-                    $(this).wrapAll(
-                        func ? structure.call(this, index) :
-                        clone ? dom.cloneNode(true) : dom
-                    )
-                })
-            },
-
-            wrapAll: function(wrappingElement) {
-                if (this[0]) {
-                    $(this[0]).before(wrappingElement = $(wrappingElement));
-                    var children;
-                    // drill down to the inmost element
-                    while ((children = wrappingElement.children()).length) {
-                        wrappingElement = children.first();
-                    }
-                    $(wrappingElement).append(this);
-                }
-                return this
-            },
-
-            wrapInner: function(wrappingElement) {
-                var func = isFunction(wrappingElement)
-                return this.each(function(index) {
-                    var self = $(this),
-                        contents = self.contents(),
-                        dom = func ? wrappingElement.call(this, index) : wrappingElement
-                    contents.length ? contents.wrapAll(dom) : self.append(dom)
-                })
-            },
-
-            unwrap: function(selector) {
-                if (this.parent().children().length === 0) {
-                    // remove dom without text
-                    this.parent(selector).not("body").each(function() {
-                        $(this).replaceWith(document.createTextNode(this.childNodes[0].textContent));
-                    });
-                } else {
-                    this.parent().each(function() {
-                        $(this).replaceWith($(this).children())
-                    });
-                }
-                return this
-            },
-
-            clone: function() {
-                return this.map(function() {
-                    return this.cloneNode(true)
-                })
-            },
-
-            hide: wrapper_every_act(fx.hide, fx),
-
-            toggle: function(setting) {
-                return this.each(function() {
-                    var el = $(this);
-                    (setting === undefined ? el.css("display") == "none" : setting) ? el.show(): el.hide()
-                })
-            },
-
-            prev: function(selector) {
-                return $(this.pluck('previousElementSibling')).filter(selector || '*')
-            },
-
-            prevAll: wrapper_selector(finder.previousSibling, finder),
-
-            next: function(selector) {
-                return $(this.pluck('nextElementSibling')).filter(selector || '*')
-            },
-
-            nextAll: wrapper_selector(finder.nextSiblings, finder),
-
-            siblings: wrapper_selector(finder.siblings, finder),
-
-            html: wrapper_value(noder.html, noder, noder.html),
-
-            text: wrapper_value(datax.text, datax, datax.text),
-
-            attr: wrapper_name_value(datax.attr, datax, datax.attr),
-
-            removeAttr: wrapper_every_act(datax.removeAttr, datax),
-
-            prop: wrapper_name_value(datax.prop, datax, datax.prop),
-
-            removeProp: wrapper_every_act(datax.removeProp, datax),
-
-            data: wrapper_name_value(datax.data, datax, datax.data),
-
-            removeData: wrapper_every_act(datax.removeData, datax),
-
-            val: wrapper_value(datax.val, datax, datax.val),
-
-            offset: wrapper_value(geom.pagePosition, geom, geom.pagePosition),
-
-            style: wrapper_name_value(styler.css, styler),
-
-            css: wrapper_name_value(styler.css, styler),
-
-            index: function(elem) {
-                if (elem) {
-                    return this.indexOf($(elem)[0]);
-                } else {
-                    return this.parent().children().indexOf(this[0]);
-                }
-            },
-
-            //hasClass(name)
-            hasClass: wrapper_some_chk(styler.hasClass, styler),
-
-            //addClass(name)
-            addClass: wrapper_every_act_firstArgFunc(styler.addClass, styler, styler.className),
-
-            //removeClass(name)
-            removeClass: wrapper_every_act_firstArgFunc(styler.removeClass, styler, styler.className),
-
-            //toogleClass(name,when)
-            toggleClass: wrapper_every_act_firstArgFunc(styler.toggleClass, styler, styler.className),
-
-            scrollTop: wrapper_value(geom.scrollTop, geom),
-
-            scrollLeft: wrapper_value(geom.scrollLeft, geom),
-
-            position: function(options) {
-                if (!this.length) return
-
-                if (options) {
-                    if (options.of && options.of.length) {
-                        options = langx.clone(options);
-                        options.of = options.of[0];
-                    }
-                    return this.each( function() {
-                        geom.posit(this,options);
-                    });
-                } else {
-                    var elem = this[0];
-
-                    return geom.relativePosition(elem);
-
-                }             
-            },
-
-            offsetParent: wrapper_map(geom.offsetParent, geom)
-        });
-
-        // for now
-        $.fn.detach = $.fn.remove;
-
-        $.fn.hover = function(fnOver, fnOut) {
-            return this.mouseenter(fnOver).mouseleave(fnOut || fnOver);
-        };
-
-        $.fn.size = wrapper_value(geom.size, geom);
-
-        $.fn.width = wrapper_value(geom.width, geom, geom.width);
-
-        $.fn.height = wrapper_value(geom.height, geom, geom.height);
-
-        $.fn.clientSize = wrapper_value(geom.clientSize, geom.clientSize);
-
-        ['width', 'height'].forEach(function(dimension) {
-            var offset, Dimension = dimension.replace(/./, function(m) {
-                return m[0].toUpperCase()
-            });
-
-            $.fn['outer' + Dimension] = function(margin, value) {
-                if (arguments.length) {
-                    if (typeof margin !== 'boolean') {
-                        value = margin;
-                        margin = false;
-                    }
-                } else {
-                    margin = false;
-                    value = undefined;
-                }
-
-                if (value === undefined) {
-                    var el = this[0];
-                    if (!el) {
-                        return undefined;
-                    }
-                    var cb = geom.size(el);
-                    if (margin) {
-                        var me = geom.marginExtents(el);
-                        cb.width = cb.width + me.left + me.right;
-                        cb.height = cb.height + me.top + me.bottom;
-                    }
-                    return dimension === "width" ? cb.width : cb.height;
-                } else {
-                    return this.each(function(idx, el) {
-                        var mb = {};
-                        var me = geom.marginExtents(el);
-                        if (dimension === "width") {
-                            mb.width = value;
-                            if (margin) {
-                                mb.width = mb.width - me.left - me.right
-                            }
-                        } else {
-                            mb.height = value;
-                            if (margin) {
-                                mb.height = mb.height - me.top - me.bottom;
-                            }
-                        }
-                        geom.size(el, mb);
-                    })
-
-                }
-            };
-        })
-
-        $.fn.innerWidth = wrapper_value(geom.clientWidth, geom, geom.clientWidth);
-
-        $.fn.innerHeight = wrapper_value(geom.clientHeight, geom, geom.clientHeight);
-
-        var traverseNode = noder.traverse;
-
-        function wrapper_node_operation(func, context, oldValueFunc) {
-            return function(html) {
-                var argType, nodes = langx.map(arguments, function(arg) {
-                    argType = type(arg)
-                    return argType == "object" || argType == "array" || arg == null ?
-                        arg : noder.createFragment(arg)
-                });
-                if (nodes.length < 1) {
-                    return this
-                }
-                this.each(function(idx) {
-                    func.apply(context, [this, nodes, idx > 0]);
-                });
-                return this;
-            }
-        }
-
-
-        $.fn.after = wrapper_node_operation(noder.after, noder);
-
-        $.fn.prepend = wrapper_node_operation(noder.prepend, noder);
-
-        $.fn.before = wrapper_node_operation(noder.before, noder);
-
-        $.fn.append = wrapper_node_operation(noder.append, noder);
-
-
-        langx.each( {
-            appendTo: "append",
-            prependTo: "prepend",
-            insertBefore: "before",
-            insertAfter: "after",
-            replaceAll: "replaceWith"
-        }, function( name, original ) {
-            $.fn[ name ] = function( selector ) {
-                var elems,
-                    ret = [],
-                    insert = $( selector ),
-                    last = insert.length - 1,
-                    i = 0;
-
-                for ( ; i <= last; i++ ) {
-                    elems = i === last ? this : this.clone( true );
-                    $( insert[ i ] )[ original ]( elems );
-
-                    // Support: Android <=4.0 only, PhantomJS 1 only
-                    // .get() because push.apply(_, arraylike) throws on ancient WebKit
-                    push.apply( ret, elems.get() );
-                }
-
-                return this.pushStack( ret );
-            };
-        } );
-
-/*
-        $.fn.insertAfter = function(html) {
-            $(html).after(this);
-            return this;
-        };
-
-        $.fn.insertBefore = function(html) {
-            $(html).before(this);
-            return this;
-        };
-
-        $.fn.appendTo = function(html) {
-            $(html).append(this);
-            return this;
-        };
-
-        $.fn.prependTo = function(html) {
-            $(html).prepend(this);
-            return this;
-        };
-
-        $.fn.replaceAll = function(selector) {
-            $(selector).replaceWith(this);
-            return this;
-        };
-*/
-        return $;
-    })();
-
-    (function($) {
-        $.fn.on = wrapper_every_act(eventer.on, eventer);
-
-        $.fn.off = wrapper_every_act(eventer.off, eventer);
-
-        $.fn.trigger = wrapper_every_act(eventer.trigger, eventer);
-
-        ('focusin focusout focus blur load resize scroll unload click dblclick ' +
-            'mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave ' +
-            'change select keydown keypress keyup error transitionEnd').split(' ').forEach(function(event) {
-            $.fn[event] = function(data, callback) {
-                return (0 in arguments) ?
-                    this.on(event, data, callback) :
-                    this.trigger(event)
-            }
-        });
-
-        $.fn.one = function(event, selector, data, callback) {
-            if (!langx.isString(selector) && !langx.isFunction(callback)) {
-                callback = data;
-                data = selector;
-                selector = null;
-            }
-
-            if (langx.isFunction(data)) {
-                callback = data;
-                data = null;
-            }
-
-            return this.on(event, selector, data, callback, 1)
-        };
-
-        $.fn.animate = wrapper_every_act(fx.animate, fx);
-        $.fn.emulateTransitionEnd = wrapper_every_act(fx.emulateTransitionEnd, fx);
-
-        $.fn.show = wrapper_every_act(fx.show, fx);
-        $.fn.hide = wrapper_every_act(fx.hide, fx);
-        $.fn.toogle = wrapper_every_act(fx.toogle, fx);
-        $.fn.fadeTo = wrapper_every_act(fx.fadeTo, fx);
-        $.fn.fadeIn = wrapper_every_act(fx.fadeIn, fx);
-        $.fn.fadeOut = wrapper_every_act(fx.fadeOut, fx);
-        $.fn.fadeToggle = wrapper_every_act(fx.fadeToggle, fx);
-
-        $.fn.slideDown = wrapper_every_act(fx.slideDown, fx);
-        $.fn.slideToggle = wrapper_every_act(fx.slideToggle, fx);
-        $.fn.slideUp = wrapper_every_act(fx.slideUp, fx);
-
-        $.fn.scrollParent = function( includeHidden ) {
-            var position = this.css( "position" ),
-                excludeStaticParent = position === "absolute",
-                overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/,
-                scrollParent = this.parents().filter( function() {
-                    var parent = $( this );
-                    if ( excludeStaticParent && parent.css( "position" ) === "static" ) {
-                        return false;
-                    }
-                    return overflowRegex.test( parent.css( "overflow" ) + parent.css( "overflow-y" ) +
-                        parent.css( "overflow-x" ) );
-                } ).eq( 0 );
-
-            return position === "fixed" || !scrollParent.length ?
-                $( this[ 0 ].ownerDocument || document ) :
-                scrollParent;
-        };
-    })(query);
-
-
-    (function($) {
-        $.fn.end = function() {
-            return this.prevObject || $()
-        }
-
-        $.fn.andSelf = function() {
-            return this.add(this.prevObject || $())
-        }
-
-        $.fn.addBack = function(selector) {
-            if (this.prevObject) {
-                if (selector) {
-                    return this.add(this.prevObject.filter(selector));
-                } else {
-                    return this.add(this.prevObject);
-                }
-            } else {
-                return this;
-            }
-        }
-
-        'filter,add,not,eq,first,last,find,closest,parents,parent,children,siblings'.split(',').forEach(function(property) {
-            var fn = $.fn[property]
-            $.fn[property] = function() {
-                var ret = fn.apply(this, arguments)
-                ret.prevObject = this
-                return ret
-            }
-        })
-    })(query);
-
-
-    (function($) {
-        $.fn.query = $.fn.find;
-
-        $.fn.place = function(refNode, position) {
-            // summary:
-            //      places elements of this node list relative to the first element matched
-            //      by queryOrNode. Returns the original NodeList. See: `dojo/dom-construct.place`
-            // queryOrNode:
-            //      may be a string representing any valid CSS3 selector or a DOM node.
-            //      In the selector case, only the first matching element will be used
-            //      for relative positioning.
-            // position:
-            //      can be one of:
-            //
-            //      -   "last" (default)
-            //      -   "first"
-            //      -   "before"
-            //      -   "after"
-            //      -   "only"
-            //      -   "replace"
-            //
-            //      or an offset in the childNodes
-            if (langx.isString(refNode)) {
-                refNode = finder.descendant(refNode);
-            } else if (isQ(refNode)) {
-                refNode = refNode[0];
-            }
-            return this.each(function(i, node) {
-                switch (position) {
-                    case "before":
-                        noder.before(refNode, node);
-                        break;
-                    case "after":
-                        noder.after(refNode, node);
-                        break;
-                    case "replace":
-                        noder.replace(refNode, node);
-                        break;
-                    case "only":
-                        noder.empty(refNode);
-                        noder.append(refNode, node);
-                        break;
-                    case "first":
-                        noder.prepend(refNode, node);
-                        break;
-                        // else fallthrough...
-                    default: // aka: last
-                        noder.append(refNode, node);
-                }
-            });
-        };
-
-        $.fn.addContent = function(content, position) {
-            if (content.template) {
-                content = langx.substitute(content.template, content);
-            }
-            return this.append(content);
-        };
-
-        $.fn.replaceClass = function(newClass, oldClass) {
-            this.removeClass(oldClass);
-            this.addClass(newClass);
-            return this;
-        };
-
-        $.fn.replaceClass = function(newClass, oldClass) {
-            this.removeClass(oldClass);
-            this.addClass(newClass);
-            return this;
-        };
-
-        $.fn.disableSelection = ( function() {
-            var eventType = "onselectstart" in document.createElement( "div" ) ?
-                "selectstart" :
-                "mousedown";
-
-            return function() {
-                return this.on( eventType + ".ui-disableSelection", function( event ) {
-                    event.preventDefault();
-                } );
-            };
-        } )();
-
-        $.fn.enableSelection = function() {
-            return this.off( ".ui-disableSelection" );
-        };
-       
-
-    })(query);
-
-    query.fn.plugin = function(name,options) {
-        var args = slice.call( arguments, 1 ),
-            self = this,
-            returnValue = this;
-
-        this.each(function(){
-            returnValue = plugins.instantiate.apply(self,[this,name].concat(args));
-        });
-        return returnValue;
-    };
-
-    return dom.query = query;
-
-});
-define('skylark-utils-dom/elmx',[
-    "./dom",
-    "./langx",
-    "./datax",
-    "./eventer",
-    "./finder",
+define('skylark-domx-fx/throb',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "skylark-domx-noder",
     "./fx",
-    "./geom",
-    "./noder",
-    "./styler",
-    "./query"
-], function(dom, langx, datax, eventer, finder, fx, geom, noder, styler,$) {
-    var map = Array.prototype.map,
-        slice = Array.prototype.slice;
-    /*
-     * VisualElement is a skylark class type wrapping a visule dom node,
-     * provides a number of prototype methods and supports chain calls.
-     */
-    var VisualElement = langx.klass({
-        klassName: "VisualElement",
+    "./animate"
+],function(langx,styler,noder,fx,animate) {
 
-        "_construct": function(node) {
-            if (langx.isString(node)) {
-                if (node.charAt(0) === "<") {
-                    //html
-                    node = noder.createFragment(node)[0];
-                } else {
-                    // id
-                    node = document.getElementById(node);
+    
+    /*   
+     * Replace an old node with the specified node.
+     * @param {HTMLElement} elm
+     * @param {Node} params
+     */
+    function throb(elm, params) {
+        params = params || {};
+        var self = this,
+            text = params.text,
+            style = params.style,
+            time = params.time,
+            callback = params.callback,
+            timer,
+
+            throbber = noder.createElement("div", {
+                "class": params.className || "throbber"
+            }),
+            //_overlay = overlay(throbber, {
+            //    "class": 'overlay fade'
+            //}),
+            throb = noder.createElement("div", {
+                "class": params.throb && params.throb.className || "throb"
+            }),
+            textNode = noder.createTextNode(text || ""),
+            remove = function() {
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
                 }
-            }
-            this._elm = node;
+                if (throbber) {
+                    noder.remove(throbber);
+                    throbber = null;
+                }
+            },
+            update = function(params) {
+                if (params && params.text && throbber) {
+                    textNode.nodeValue = params.text;
+                }
+            };
+        if (params.style) {
+            styler.css(throbber,params.style);
         }
-    });
-
-    VisualElement.prototype.$ = VisualElement.prototype.query = function(selector) {
-        return $(selector,this._elm);
-    };
-
-    VisualElement.prototype.elm = function() {
-        return this._elm;
-    };
-
-    /*
-     * the VisualElement object wrapping document.body
-     */
-    var root = new VisualElement(document.body),
-        elmx = function(node) {
-            if (node) {
-                return new VisualElement(node);
-            } else {
-                return root;
-            }
+        throb.appendChild(textNode);
+        throbber.appendChild(throb);
+        elm.appendChild(throbber);
+        var end = function() {
+            remove();
+            if (callback) callback();
         };
-    /*
-     * Extend VisualElement prototype with wrapping the specified methods.
-     * @param {ArrayLike} fn
-     * @param {Object} context
-     */
-    function _delegator(fn, context) {
-        return function() {
-            var self = this,
-                elem = self._elm,
-                ret = fn.apply(context, [elem].concat(slice.call(arguments)));
+        if (time) {
+            timer = setTimeout(end, time);
+        }
 
-            if (ret) {
-                if (ret === context) {
-                    return self;
-                } else {
-                    if (ret instanceof HTMLElement) {
-                        ret = new VisualElement(ret);
-                    } else if (langx.isArrayLike(ret)) {
-                        ret = map.call(ret, function(el) {
-                            if (el instanceof HTMLElement) {
-                                return new VisualElement(el);
-                            } else {
-                                return el;
-                            }
-                        })
-                    }
-                }
-            }
-            return ret;
+        return {
+            remove: remove,
+            update: update
         };
     }
 
-    langx.mixin(elmx, {
-        batch: function(nodes, action, args) {
-            nodes.forEach(function(node) {
-                var elm = (node instanceof VisualElement) ? node : elmx(node);
-                elm[action].apply(elm, args);
-            });
-
-            return this;
-        },
-
-        root: new VisualElement(document.body),
-
-        VisualElement: VisualElement,
-
-        partial: function(name, fn) {
-            var props = {};
-
-            props[name] = fn;
-
-            VisualElement.partial(props);
-        },
-
-        delegate: function(names, context) {
-            var props = {};
-
-            names.forEach(function(name) {
-                props[name] = _delegator(context[name], context);
-            });
-
-            VisualElement.partial(props);
-        }
-    });
-
-    // from ./datax
-    elmx.delegate([
-        "attr",
-        "data",
-        "prop",
-        "removeAttr",
-        "removeData",
-        "text",
-        "val"
-    ], datax);
-
-    // from ./eventer
-    elmx.delegate([
-        "off",
-        "on",
-        "one",
-        "shortcuts",
-        "trigger"
-    ], eventer);
-
-    // from ./finder
-    elmx.delegate([
-        "ancestor",
-        "ancestors",
-        "children",
-        "descendant",
-        "find",
-        "findAll",
-        "firstChild",
-        "lastChild",
-        "matches",
-        "nextSibling",
-        "nextSiblings",
-        "parent",
-        "previousSibling",
-        "previousSiblings",
-        "siblings"
-    ], finder);
-
-    /*
-     * find a dom element matched by the specified selector.
-     * @param {String} selector
+    return fx.throb = throb;
+});
+define('skylark-domx-fx/toggle',[
+    "skylark-langx/langx",
+    "skylark-domx-styler",
+    "./fx",
+    "./show",
+    "./hide"
+],function(langx,styler,fx,show,hide) {
+    /*   
+     * Display or hide an element.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {Function} callbacke
      */
-    elmx.find = function(selector) {
-        if (selector === "body") {
-            return this.root;
+    function toggle(elm, speed, callback) {
+        if (styler.isInvisible(elm)) {
+            show(elm, speed, callback);
         } else {
-            return this.root.descendant(selector);
+            hide(elm, speed, callback);
         }
-    };
+        return this;
+    }
 
+    return fx.toggle = toggle;
+});
+define('skylark-domx-fx/main',[
+	"./fx",
+	"skylark-domx-velm",
+	"skylark-domx-query",
+    "./animate",
+    "./bounce",
+    "./emulateTransitionEnd",
+    "./explode",
+    "./fadeIn",
+    "./fadeOut",
+    "./fade",
+    "./fadeToggle",
+    "./hide",
+    "./pulsate",
+    "./shake",
+    "./show",
+    "./slide",
+    "./slideDown",
+    "./slideToggle",
+    "./slideUp",
+    "./throb",
+    "./toggle"
+],function(fx,velm,$){
     // from ./fx
-    elmx.delegate([
+    velm.delegate([
         "animate",
+        "emulateTransitionEnd",
         "fadeIn",
         "fadeOut",
-        "fadeTo",
+        "fade",
         "fadeToggle",
         "hide",
         "scrollToTop",
+        "slideDown",
+        "slideToggle",
+        "slideUp",
         "show",
         "toggle"
     ], fx);
 
+    $.fn.hide =  $.wraps.wrapper_every_act(fx.hide, fx);
 
-    // from ./geom
-    elmx.delegate([
-        "borderExtents",
-        "boundingPosition",
-        "boundingRect",
-        "clientHeight",
-        "clientSize",
-        "clientWidth",
-        "contentRect",
-        "height",
-        "marginExtents",
-        "offsetParent",
-        "paddingExtents",
-        "pagePosition",
-        "pageRect",
-        "relativePosition",
-        "relativeRect",
-        "scrollIntoView",
-        "scrollLeft",
-        "scrollTop",
-        "size",
-        "width"
-    ], geom);
+    $.fn.animate = $.wraps.wrapper_every_act(fx.animate, fx);
+    $.fn.emulateTransitionEnd = $.wraps.wrapper_every_act(fx.emulateTransitionEnd, fx);
 
-    // from ./noder
-    elmx.delegate([
-        "after",
-        "append",
-        "before",
-        "clone",
-        "contains",
-        "contents",
-        "empty",
-        "html",
-        "isChildOf",
-        "isDocument",
-        "isInDocument",
-        "isWindow",
-        "ownerDoc",
-        "prepend",
-        "remove",
-        "removeChild",
-        "replace",
-        "reverse",
-        "throb",
-        "traverse",
-        "wrapper",
-        "wrapperInner",
-        "unwrap"
-    ], noder);
+    $.fn.show = $.wraps.wrapper_every_act(fx.show, fx);
+    $.fn.hide = $.wraps.wrapper_every_act(fx.hide, fx);
+    $.fn.toogle = $.wraps.wrapper_every_act(fx.toogle, fx);
+    $.fn.fadeTo = $.wraps.wrapper_every_act(fx.fadeTo, fx);
+    $.fn.fadeIn = $.wraps.wrapper_every_act(fx.fadeIn, fx);
+    $.fn.fadeOut = $.wraps.wrapper_every_act(fx.fadeOut, fx);
+    $.fn.fadeToggle = $.wraps.wrapper_every_act(fx.fadeToggle, fx);
 
-    // from ./styler
-    elmx.delegate([
-        "addClass",
-        "className",
-        "css",
-        "hasClass",
-        "hide",
-        "isInvisible",
-        "removeClass",
-        "show",
-        "toggleClass"
-    ], styler);
+    $.fn.slideDown = $.wraps.wrapper_every_act(fx.slideDown, fx);
+    $.fn.slideToggle = $.wraps.wrapper_every_act(fx.slideToggle, fx);
+    $.fn.slideUp = $.wraps.wrapper_every_act(fx.slideUp, fx);
 
-    // properties
-
-    var properties = [ 'position', 'left', 'top', 'right', 'bottom', 'width', 'height', 'border', 'borderLeft',
-    'borderTop', 'borderRight', 'borderBottom', 'borderColor', 'display', 'overflow', 'margin', 'marginLeft', 'marginTop', 'marginRight', 'marginBottom', 'padding', 'paddingLeft', 'paddingTop', 'paddingRight', 'paddingBottom', 'color',
-    'background', 'backgroundColor', 'opacity', 'fontSize', 'fontWeight', 'textAlign', 'textDecoration', 'textTransform', 'cursor', 'zIndex' ];
-
-    properties.forEach( function ( property ) {
-
-        var method = property;
-
-        VisualElement.prototype[method ] = function (value) {
-
-            this.css( property, value );
-
-            return this;
-
-        };
-
-    });
-
-    // events
-    var events = [ 'keyUp', 'keyDown', 'mouseOver', 'mouseOut', 'click', 'dblClick', 'change' ];
-
-    events.forEach( function ( event ) {
-
-        var method = event;
-
-        VisualElement.prototype[method ] = function ( callback ) {
-
-            this.on( event.toLowerCase(), callback);
-
-            return this;
-        };
-
-    });
-
-
-    return dom.elmx = elmx;
+	return fx;
 });
-define('skylark-utils-dom/plugins',[
-    "./dom",
-    "./langx",
-    "./noder",
-    "./datax",
-    "./eventer",
-    "./finder",
-    "./geom",
-    "./styler",
-    "./fx",
-    "./query",
-    "./elmx"
-], function(dom, langx, noder, datax, eventer, finder, geom, styler, fx, $, elmx) {
+define('skylark-domx-fx', ['skylark-domx-fx/main'], function (main) { return main; });
+
+define('skylark-domx-plugins/plugins',[
+    "skylark-langx-ns",
+    "skylark-langx-types",
+    "skylark-langx-objects",
+    "skylark-langx-funcs",
+    "skylark-langx-events/Emitter",
+    "skylark-domx-noder",
+    "skylark-domx-data",
+    "skylark-domx-eventer",
+    "skylark-domx-finder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-fx",
+    "skylark-domx-query",
+    "skylark-domx-velm"
+], function(
+    skylark,
+    types,
+    objects,
+    funcs,
+    Emitter, 
+    noder, 
+    datax, 
+    eventer, 
+    finder, 
+    geom, 
+    styler, 
+    fx, 
+    $, 
+    elmx
+) {
     "use strict";
 
     var slice = Array.prototype.slice,
@@ -9673,7 +17762,7 @@ define('skylark-utils-dom/plugins',[
                 throw new Error ("The plugin instance is not existed");
             }
             pluginInstance.destroy();
-            datax.removeData( elm, pluginName);
+            //datax.removeData( elm, pluginName);
             pluginInstance = undefined;
         } else {
             if (!pluginInstance) {
@@ -9691,6 +17780,7 @@ define('skylark-utils-dom/plugins',[
         return pluginInstance;
     }
 
+
     function shortcutter(pluginName,extfn) {
        /*
         * Create or get or destory a plugin instance assocated with the element,
@@ -9701,12 +17791,15 @@ define('skylark-utils-dom/plugins',[
             if ( options === "instance" ) {
               return plugin || null;
             }
+
             if (!plugin) {
                 plugin = instantiate(elm, pluginName,typeof options == 'object' && options || {});
-            }
-
+                if (typeof options != "string") {
+                  return this;
+                }
+            } 
             if (options) {
-                var args = slice.call(arguments,2);
+                var args = slice.call(arguments,1); //2
                 if (extfn) {
                     return extfn.apply(plugin,args);
                 } else {
@@ -9719,12 +17812,19 @@ define('skylark-utils-dom/plugins',[
                                 "attempted to call method '" + methodName + "'" );
                         }
 
-                        if ( !langx.isFunction( plugin[ methodName ] ) || methodName.charAt( 0 ) === "_" ) {
+                        if ( !types.isFunction( plugin[ methodName ] ) || methodName.charAt( 0 ) === "_" ) {
                             throw new Error( "no such method '" + methodName + "' for " + pluginName +
                                 " plugin instance" );
                         }
 
-                        return plugin[methodName].apply(plugin,args);
+                        args = slice.call(args,1); //remove method name
+
+                        var ret = plugin[methodName].apply(plugin,args);
+                        if (ret == plugin) {
+                          ret = undefined;
+                        }
+
+                        return ret;
                     }                
                 }                
             }
@@ -9742,7 +17842,7 @@ define('skylark-utils-dom/plugins',[
         pluginKlasses[pluginName] = pluginKlass;
 
         if (shortcutName) {
-            if (instanceDataName && langx.isFunction(instanceDataName)) {
+            if (instanceDataName && types.isFunction(instanceDataName)) {
                 extfn = instanceDataName;
                 instanceDataName = null;
             } 
@@ -9762,10 +17862,9 @@ define('skylark-utils-dom/plugins',[
                   this.each(function () {
                     var args2 = slice.call(args);
                     args2.unshift(this);
-                    var  ret  = shortcut.apply(null,args2);
+                    var  ret  = shortcut.apply(undefined,args2);
                     if (ret !== undefined) {
                         returnValue = ret;
-                        return false;
                     }
                   });
                 }
@@ -9785,7 +17884,7 @@ define('skylark-utils-dom/plugins',[
     }
 
  
-    var Plugin =   langx.Evented.inherit({
+    var Plugin =   Emitter.inherit({
         klassName: "Plugin",
 
         _construct : function(elm,options) {
@@ -9811,15 +17910,15 @@ define('skylark-utils-dom/plugins',[
             for (var i=0;i<ctors.length;i++) {
               ctor = ctors[i];
               if (ctor.prototype.hasOwnProperty("options")) {
-                langx.mixin(defaults,ctor.prototype.options);
+                objects.mixin(defaults,ctor.prototype.options,true);
               }
               if (ctor.hasOwnProperty("options")) {
-                langx.mixin(defaults,ctor.options);
+                objects.mixin(defaults,ctor.options,true);
               }
             }
           }
           Object.defineProperty(this,"options",{
-            value :langx.mixin({},defaults,options)
+            value :objects.mixin({},defaults,options,true)
           });
 
           //return this.options = langx.mixin({},defaults,options);
@@ -9828,15 +17927,16 @@ define('skylark-utils-dom/plugins',[
 
 
         destroy: function() {
-            var that = this;
 
             this._destroy();
-            // We can probably remove the unbind calls in 2.0
-            // all event bindings should go through this._on()
+
+            // remove all event lisener
+            this.unlistenTo();
+            // remove data 
             datax.removeData(this._elm,this.pluginName );
         },
 
-        _destroy: langx.noop,
+        _destroy: funcs.noop,
 
         _delay: function( handler, delay ) {
             function handlerProxy() {
@@ -9845,6 +17945,17 @@ define('skylark-utils-dom/plugins',[
             }
             var instance = this;
             return setTimeout( handlerProxy, delay || 0 );
+        },
+
+        elmx : function(elm) {
+            elm = elm || this._elm;
+            return elmx(elm);
+
+        },
+
+        $ : function(elm) {
+            elm = elm || this._elm;
+            return $(elm);
         },
 
         option: function( key, value ) {
@@ -9856,7 +17967,7 @@ define('skylark-utils-dom/plugins',[
             if ( arguments.length === 0 ) {
 
                 // Don't return a reference to the internal hash
-                return langx.mixin( {}, this.options );
+                return objects.mixin( {}, this.options );
             }
 
             if ( typeof key === "string" ) {
@@ -9866,7 +17977,7 @@ define('skylark-utils-dom/plugins',[
                 parts = key.split( "." );
                 key = parts.shift();
                 if ( parts.length ) {
-                    curOption = options[ key ] = langx.mixin( {}, this.options[ key ] );
+                    curOption = options[ key ] = objects.mixin( {}, this.options[ key ] );
                     for ( i = 0; i < parts.length - 1; i++ ) {
                         curOption[ parts[ i ] ] = curOption[ parts[ i ] ] || {};
                         curOption = curOption[ parts[ i ] ];
@@ -9906,16 +18017,27 @@ define('skylark-utils-dom/plugins',[
             return this;
         },
 
+        getUID : function (prefix) {
+            prefix = prefix || "plugin";
+            do prefix += ~~(Math.random() * 1000000)
+            while (document.getElementById(prefix))
+            return prefix;
+        },
+
         elm : function() {
             return this._elm;
         }
 
     });
 
+    Plugin.instantiate = function(elm,options) {
+        return instantiate(elm,this.prototype.pluginName,options);
+    };
+    
     $.fn.plugin = function(name,options) {
         var args = slice.call( arguments, 1 ),
             self = this,
-            returnValue = this;
+            returnValue ;
 
         this.each(function(){
             returnValue = instantiate.apply(self,[this,name].concat(args));
@@ -9925,7 +18047,7 @@ define('skylark-utils-dom/plugins',[
 
     elmx.partial("plugin",function(name,options) {
         var args = slice.call( arguments, 1 );
-        return instantiate.apply(this,[this.domNode,name].concat(args));
+        return instantiate.apply(this,[this._elm,name].concat(args));
     }); 
 
 
@@ -9933,731 +18055,33 @@ define('skylark-utils-dom/plugins',[
         return plugins;
     }
      
-    langx.mixin(plugins, {
+    objects.mixin(plugins, {
         instantiate,
         Plugin,
         register,
         shortcuts
     });
 
-    return plugins;
+    return  skylark.attach("domx.plugins",plugins);
 });
-define('skylark-utils-collection/collections',[
-	"skylark-langx/skylark"
-],function(skylark){
-	return skylark.collections = {};
+define('skylark-domx-plugins/main',[
+	"./plugins"
+],function(plugins){
+	return plugins;
 });
-define('skylark-utils-collection/Collection',[
-    "skylark-langx/Evented",
-    "./collections"
-], function(Evented, collections) {
-
-    var Collection = collections.Collection = Evented.inherit({
-
-        "klassName": "Collection",
-
-        _clear: function() {
-            throw new Error('Unimplemented API');
-        },
-
-        "clear": function() {
-            //desc: "Removes all items from the Collection",
-            //result: {
-            //    type: Collection,
-            //    desc: "this instance for chain call"
-            //},
-            //params: [],
-            this._clear();
-            this.trigger("changed:clear");
-            return this;
-        },
-
-        /*
-         *@method count
-         *@return {Number}
-         */
-        count : /*Number*/function () {
-            var c = 0,
-                it = this.iterator();
-            while(!it.hasNext()){
-                c++;
-            }
-            return c;
-        },
-
-        "forEach": function( /*Function*/ func, /*Object?*/ thisArg) {
-            //desc: "Executes a provided callback function once per collection item.",
-            //result: {
-            //    type: Number,
-            //    desc: "the number of items"
-            //},
-            //params: [{
-            //    name: "func",
-            //    type: Function,
-            //    desc: "Function to execute for each element."
-            //}, {
-            //    name: "thisArg",
-            //    type: Object,
-            //    desc: "Value to use as this when executing callback."
-            //}],
-            var it = this.iterator();
-            while(it.hasNext()){
-                var item = it.next();
-                func.call(thisArg || item,item);
-            }
-            return this;
-
-        },
-
-        "iterator" : function() {
-            throw new Error('Unimplemented API');
-        },
-
-        "toArray": function() {
-            //desc: "Returns an array containing all of the items in this collection in proper sequence (from first to last item).",
-            //result: {
-            //    type: Array,
-            //    desc: "an array containing all of the elements in this collection in proper sequence"
-            //},
-            //params: [],
-            var items = [],
-                it = this.iterator();
-            while(!it.hasNext()){
-                items.push(it.next());
-            }
-            return items;
-        }
-    });
-
-    return Collection;
-});
-
-
-define('skylark-utils-collection/Map',[
-    "./collections",
-    "./Collection"
-], function( collections, Collection) {
-
-    var Map = collections.Map = Collection.inherit({
-
-        "klassName": "Map",
-
-        _getInnerItems : function() {
-            return this._items;
-        },
-
-        _clear : function() {
-            this._items = [];
-        },
-
-        _findKeyByRegExp: function(regExp, callback) {
-            var items = this._getInnerItems();
-            return items.filter(function(key) {
-                if (key.match(regExp)) {
-                    if (callback) callback(key);
-                    return true;
-                } else {
-                    return false;
-                }
-            });
-        },
-
-        "get":  function(strKey, silent) {
-            //desc: "Returns the item at the specified key in the Hashtable.",
-            //result: {
-            //    type: Object,
-            //    desc: "The item at the specified key."
-            //},
-            //params: [{
-            //    name: "strKey",
-            //    type: String,
-            //    desc: "The key of the item to return."
-            //}, {
-            //    name: "silent",
-            //    type: Boolean,
-            //    desc: "the silent flag.",
-            //    optional: true
-            //}],
-            if (typeof(strKey) != "string") {
-                throw "hash key is not string!";
-            }
-            /*
-            if (!silent && !this.contains(strKey)) {
-                throw "hash key is not  existed";
-            }
-            */
-            var items = this._getInnerItems();
-            return items[strKey];
-        },
-
-        "iterator" : function() {
-            var i =0;
-            return {
-                hasNext : function() {
-                    return i < this._items.length;
-                },
-                next : function() {
-                    var key =  this._items[i++];
-                    return [this._items[key],key];
-                }
-            }
-        },
-
-        "set": function( /*String*/ strKey, /*Object*/ value) {
-            //desc: "Replaces the item at the specified key in the Hashtable with the specified item.",
-            //result: {
-            //    type: Map,
-            //    desc: "this instance for chain call."
-            //},
-            //params: [{
-            //    name: "strKey",
-            //    type: String,
-            //    desc: "key of the item to replace."
-            //}, {
-            //    name: "value",
-            //    type: Object,
-            //    desc: "item to be stored at the specified position."
-            //}],
-            if (typeof(strKey) != "string") {
-                throw "hash key is not string!";
-            }
-
-            /*
-            if (!this.contains(strKey)) {
-                throw "hash key is not existed";
-            }
-            */
-
-            var items = this._getInnerItems();
-            if (items.indexOf(strKey) == -1) {
-                items.push(strKey);
-            }
-            var oldValue = items[strKey];
-            if (oldValue !== value) {
-                items[strKey] = value;
-                var updated = {};
-                updated[strKey] = {
-                    name : strKey,
-                    value : value,
-                    oldValue : oldValue
-                };
-                this.trigger("changed" ,{ //TODO: "changed:"+ strKey
-                    data : updated
-                });
-            }
-            return this;
-        },
-
-
-        "remove": function( /*String*/ strKey) {
-            //desc: "Removes the first occurrence of a specific item from the Hashtable",
-            //result: {
-            //    type: Map,
-            //    desc: "this instance for chain call."
-            //},
-            //params: [{
-            //    name: "strKey",
-            //    type: String,
-            //    desc: "The key for The item to remove from the Hashtable."
-            //}],
-            if (typeof(strKey) != "string") {
-                throw "hash key is not string!";
-            }
-            var items = this._getInnerItems();
-            var idx = items.indexOf(strKey);
-            if (idx >= 0) {
-                delete items[strKey];
-                delete items[idx];
-            }
-        },
-
-        findByRegExp: function( /*String*/ regExp, callback) {
-            //desc: "find regExp items",
-            //result: {
-            //    type: Map,
-            //    desc: "this instance for chain call."
-            //},
-            //params: [{
-            //    name: "regExp",
-            //    type: String,
-            //    desc: "The key for The item to remove from the Hashtable."
-            //}, {
-            //    name: "callback",
-            //    type: Function,
-            //    desc: "the callback method"
-            //}],
-            var items = [],
-                self = this;
-            this._findKeyByRegExp(regExp, function(key) {
-                var item = self.get(key);
-                if (callback) callback(item);
-                items.push(item);
-            });
-            return items;
-        },
-
-        removeByRegExp: function( /*String*/ regExp) {
-            //desc: "Removes regExp items",
-            //result: {
-            //    type: Map,
-            //    desc: "this instance for chain call."
-            //},
-            //params: [{
-            //    name: "regExp",
-            //    type: String,
-            //    desc: "The key for The item to remove from the Hashtable."
-            //}],
-            var self = this;
-            this._findKeyByRegExp(regExp, function(key) {
-                self.remove(key);
-            });
-        },
-
-        "toPlain": function() {
-            //desc: "Returns a plain object containing all of the items in this Hashable.",
-            //result: {
-            //    type: Object,
-            //    desc: "a plain object containing all of the items in this Hashtable."
-            //},
-            //params: [],
-            var items = this._getInnerItems(); 
-
-            for (var i = 0; i < items.length; i++) {
-                var key = items[i];
-                plain[key] = items[key];
-            }
-            return plain;
-        },
-
-        "toString": function( /*String?*/ delim) {
-            //desc: "implementation of toString, follows [].toString().",
-            //result: {
-            //    type: String,
-            //   desc: "The string."
-            //},
-            //params: [{
-            //    name: "delim",
-            //    type: String,
-            //    desc: "The delim ",
-            //    optional: true
-            //}],
-            var items = this._getInnerItems();
-
-            return items.join((delim || ","));
-        },
-
-        "init": function( /*Object*/ data) {
-            var items = this._items = [];
-            for (var name in data) {
-                items.push(name);
-                items[name]= data[name];
-            }
-        }
-       
-    });
-    return Map;
-});
-
-define('skylark-ui-swt/ui',[
-  "skylark-langx/skylark",
-  "skylark-langx/langx",
-  "skylark-utils-dom/browser",
-  "skylark-utils-dom/eventer",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/geom",
-  "skylark-utils-dom/query"
-],function(skylark,langx,browser,eventer,noder,geom,$){
-	var ui = skylark.ui = skylark.ui || {};
-		sbswt = ui.sbswt = {};
-
-	var CONST = {
-		BACKSPACE_KEYCODE: 8,
-		COMMA_KEYCODE: 188, // `,` & `<`
-		DELETE_KEYCODE: 46,
-		DOWN_ARROW_KEYCODE: 40,
-		ENTER_KEYCODE: 13,
-		TAB_KEYCODE: 9,
-		UP_ARROW_KEYCODE: 38
-	};
-
-	var isShiftHeld = function isShiftHeld (e) { return e.shiftKey === true; };
-
-	var isKey = function isKey (keyCode) {
-		return function compareKeycodes (e) {
-			return e.keyCode === keyCode;
-		};
-	};
-
-	var isBackspaceKey = isKey(CONST.BACKSPACE_KEYCODE);
-	var isDeleteKey = isKey(CONST.DELETE_KEYCODE);
-	var isTabKey = isKey(CONST.TAB_KEYCODE);
-	var isUpArrow = isKey(CONST.UP_ARROW_KEYCODE);
-	var isDownArrow = isKey(CONST.DOWN_ARROW_KEYCODE);
-
-	var ENCODED_REGEX = /&[^\s]*;/;
-	/*
-	 * to prevent double encoding decodes content in loop until content is encoding free
-	 */
-	var cleanInput = function cleanInput (questionableMarkup) {
-		// check for encoding and decode
-		while (ENCODED_REGEX.test(questionableMarkup)) {
-			questionableMarkup = $('<i>').html(questionableMarkup).text();
-		}
-
-		// string completely decoded now encode it
-		return $('<i>').text(questionableMarkup).html();
-	};
-
-	langx.mixin(ui, {
-		CONST: CONST,
-		cleanInput: cleanInput,
-		isBackspaceKey: isBackspaceKey,
-		isDeleteKey: isDeleteKey,
-		isShiftHeld: isShiftHeld,
-		isTabKey: isTabKey,
-		isUpArrow: isUpArrow,
-		isDownArrow: isDownArrow
-	});
-
-	return ui;
-
-});
-
-define('skylark-ui-swt/Widget',[
-  "skylark-langx/skylark",
-  "skylark-langx/langx",
-  "skylark-utils-dom/browser",
-  "skylark-utils-dom/datax",
-  "skylark-utils-dom/eventer",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/geom",
-  "skylark-utils-dom/elmx",
-  "skylark-utils-dom/query",
-  "skylark-utils-dom/plugins",
-  "skylark-utils-collection/Map",
-  "./ui"
-],function(skylark,langx,browser,datax,eventer,noder,geom,elmx,$,plugins,Map,ui){
-
-/*---------------------------------------------------------------------------------*/
-
-	var Widget = plugins.Plugin.inherit({
-    klassName: "Widget",
-
-    _elmx : elmx,
-
-    _construct : function(elm,options) {
-        if (langx.isHtmlNode(elm)) {
-          options = this._parse(elm,options);
-        } else {
-          options = elm;
-          elm = null;
-        }
-        this.overrided(elm,options);
-
-        if (!elm) {
-          this._elm = this._create();
-        }
-        this._velm = elmx(this._elm);
-        this.state = this.options.state || new Map();
-        this._init();
-     },
-
-    /**
-     * Parses widget options from attached element.
-     * This is a callback method called by constructor when attached element is specified.
-     * @method _parse
-     * @return {Object} options.
-     */
-    _parse : function(elm,options) {
-      var optionsAttr = datax.data(elm,"options");
-      if (optionsAttr) {
-         var options1 = JSON.parse("{" + optionsAttr + "}");
-         options = langx.mixin(options1,options); 
-      }
-      return options || {};
-    },
-
-
-    /**
-     * Create html element for this widget.
-     * This is a callback method called by constructor when attached element is not specified.
-     * @method _create
-     */
-    _create : function() {
-        //TODO:     
-    },
-
-    /**
-     * Init widget.
-     * This is a callback method called by constructor.
-     * @method _init
-     */
-    _init : function() {
-      //TODO:
-      var self = this;
-      if (this.widgetClass) {
-        this._velm.addClass(this.widgetClass);
-      }
-      this.state.on("changed",function(e,args) {
-        self._refresh(args.data);
-      });
-
-    },
-
-
-    /**
-     * Post widget.
-     * This is a callback method called when widget element is added into dom.
-     * @method _post
-     */
-    _post : function() {
-
-    },
-
-
-    /**
-     * Refresh widget.
-     * This is a callback method called when widget state is changed.
-     * @method _refresh
-     */
-    _refresh : function(updates) {
-      /*
-      var _ = this._,
-          model = _.model,
-          dom = _.dom,
-          props = {
-
-          };
-      updates = updates || {};
-      for (var attrName in updates){
-          var v = updates[attrName].value;
-          if (v && v.toCss) {
-              v.toCss(props);
-              updates[attrName].processed = true;
-          }
-
-      };
-
-      this.css(props);
-
-      if (updates["disabled"]) {
-          var v = updates["disabled"].value;
-          dom.aria('disabled', v);
-          self.classes.toggle('disabled', v);
-      }
-      */
-    },                
-
-    mapping : {
-      "events" : {
-  //       'mousedown .title':  'edit',
-  //       'click .button':     'save',
-  //       'click .open':       function(e) { ... }            
-      },
-
-      "attributs" : {
-
-      },
-
-      "properties" : {
-
-      },
-
-      "styles" : {
-
-      }
-    },
-
-    /**
-     * Returns a html element representing the widget.
-     *
-     * @method html
-     * @return {HtmlElement} HTML element representing the widget.
-     */
-    html: function() {
-      return this._elm;
-    },
-
-
-    /**
-     * Returns a parent widget  enclosing this widgets, or null if not exist.
-     *
-     * @method getEnclosing
-     * @return {Widget} The enclosing parent widget, or null if not exist.
-     */
-    getEnclosing : function(selector) {
-      return null;
-    },
-
-    /**
-     * Returns a widget collection with all enclosed child widgets.
-     *
-     * @method getEnclosed
-     * @return {List} Collection with all enclosed child widgets..
-     */
-    getEnclosed : function() {
-      var self = this;
-          children = new ArrayList();
-      return children;
-    },
-
-    /**
-     * Sets the visible state to true.
-     *
-     * @method show
-     * @return {Widget} Current widget instance.
-     */
-
-    show : function() {
-      this._velm.show();
-    },
-
-    /**
-     * Sets the visible state to false.
-     *
-     * @method hide
-     * @return {Widget} Current widget instance.
-     */
-    hide : function() {
-      this._velm.hide();
-    },
-
-    /**
-     * Focuses the current widget.
-     *
-     * @method focus
-     * @return {Widget} Current widget instance.
-     */
-    focus :function() {
-      try {
-        this._velm.focus();
-      } catch (ex) {
-        // Ignore IE error
-      }
-
-      return this;
-    },
-
-    /**
-     * Blurs the current widget.
-     *
-     * @method blur
-     * @return {Widget} Current widget instance.
-     */
-    blur : function() {
-      this._velm.blur();
-
-      return this;
-    },
-
-    enable: function () {
-      this.state.set('disabled',false);
-      return this;
-    },
-
-    disable: function () {
-      this.state.set('disabled',true);
-      return this;
-    },
-
-    /**
-     * Sets the specified aria property.
-     *
-     * @method aria
-     * @param {String} name Name of the aria property to set.
-     * @param {String} value Value of the aria property.
-     * @return {Widget} Current widget instance.
-     */
-    aria : function(name, value) {
-      const self = this, elm = self.getEl(self.ariaTarget);
-
-      if (typeof value === 'undefined') {
-        return self._aria[name];
-      }
-
-      self._aria[name] = value;
-
-      if (self.state.get('rendered')) {
-        elm.setAttribute(name === 'role' ? name : 'aria-' + name, value);
-      }
-
-      return self;
-    },
-
-    attr: function (name,value) {
-        var velm = this._velm,
-            ret = velm.attr(name,value);
-        return ret == velm ? this : ret;
-    },
-
-    css: function (name, value) {
-        var velm = this._velm,
-            ret = velm.css(name, value);
-        return ret == velm ? this : ret;
-    },
-
-    data: function (name, value) {
-        var velm = this._velm,
-            ret = velm.data(name,value);
-        return ret == velm ? this : ret;
-    },
-
-    prop: function (name,value) {
-        var velm = this._velm,
-            ret = velm.prop(name,value);
-        return ret == velm ? this : ret;
-    },
-
-    /**
-     *  Detach the current widget element from dom document.
-     *
-     * @method html
-     * @return {HtmlElement} HTML element representing the widget.
-     */
-    detach : function() {
-      this._velm.remove();
-    }
-  });
-
-  Widget.inherit = function(meta) {
-    var ctor = plugins.Plugin.inherit.apply(this,arguments);
-
-    function addStatePropMethod(name) {
-        ctor.prototype[name] = function(value) {
-          if (value !== undefined) {
-            this.state.set(name,value);
-            return this;
-          } else {
-            return this.state.get(name);
-          }
-        };
-    }
-    if (meta.state) {
-      for (var name in meta.state) {
-          addStatePropMethod(name);
-      }
-    }
-
-    if (meta.pluginName) {
-      plugins.register(ctor,meta.pluginName);
-    }
-    return ctor;
-  };
-
-	return ui.Widget = Widget;
-});
+define('skylark-domx-plugins', ['skylark-domx-plugins/main'], function (main) { return main; });
 
 define('skylark-blueimp-gallery/Gallery',[
 	"skylark-langx/skylark",
 	"skylark-langx/langx",
-	"skylark-utils-dom/noder",
-  	"skylark-ui-swt/Widget",
-], function (skylark, langx, noder, Widget) {
+	"skylark-domx-noder",
+	"skylark-domx-plugins"
+], function (skylark,langx,noder,plugins) {
 	var registry = {
 		views: [],
 		items: []
 	};
-	var Gallery = Widget.inherit({
+	var Gallery = plugins.Plugin.inherit({
 		klassName: "Gallery",
 	    pluginName : "blueimp.gallery",
 
@@ -10678,10 +18102,11 @@ define('skylark-blueimp-gallery/Gallery',[
 		 * @param {Element} el The container element. 
 		 */
 		//init: function (el, options) {
-		_init : function() {
+		_construct : function(el,options) {
+			this.overrided(el,options);
 			//this.overrided(el,options);	
-			this.$el = this._elm; // $(el);
-			this.el = this.$el[0];
+			this.$el = this.$(); // $(el);
+			this.el = this._elm;
 			//this.options = langx.mixin({}, Gallery.prototype.options, options);
 			this._itemFactories = {
 
@@ -10880,6 +18305,9 @@ define('skylark-blueimp-gallery/Gallery',[
 		}
 	});
 
+    plugins.register(Gallery);
+
+
 	var ItemFactoryBase = Gallery.ItemFactoryBase = langx.Evented.inherit({
 		klassName: "ItemFactoryBase",
 
@@ -10931,15 +18359,13 @@ define('skylark-blueimp-gallery/Gallery',[
 		plugins.push(setting);
 	};
 
-	skylark.itg = skylark.itg || {};
-	skylark.itg.blueimp = skylark.itg.blueimp || {};
-	return skylark.itg.blueimp.Gallery = Gallery;
+	return skylark.attach("intg.blueimp.Gallery",Gallery);
 });
 /* global define, window, document */
 
 define('skylark-blueimp-gallery/helper',[
-  "skylark-utils-dom/langx",
-  "skylark-utils-dom/query"
+  "skylark-langx/langx",
+  "skylark-domx-query"
 ], function (langx, q) {
   'use strict'
   q.extend = langx.mixin;
@@ -10947,8 +18373,8 @@ define('skylark-blueimp-gallery/helper',[
 });
 define('skylark-blueimp-gallery/plugins/items/image',[
 	"skylark-langx/langx",
-	"skylark-utils-dom/noder",
-	"skylark-utils-dom/query",
+	"skylark-domx-noder",
+	"skylark-domx-query",
 	'../../Gallery',
 ], function (langx, noder, $, Gallery) {
 	var ImageItemFactory = Gallery.ItemFactoryBase.inherit({
@@ -11037,9 +18463,9 @@ define('skylark-blueimp-gallery/plugins/items/image',[
 });
 define('skylark-blueimp-gallery/plugins/items/video',[
   "skylark-langx/langx",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/eventer",
-  "skylark-utils-dom/query",
+  "skylark-domx-noder",
+  "skylark-domx-eventer",
+  "skylark-domx-query",
   '../../Gallery',
 ], function (langx, noder, eventer, $, Gallery) {
 
@@ -11207,8 +18633,8 @@ define('skylark-blueimp-gallery/plugins/items/video',[
 });
 define('skylark-blueimp-gallery/plugins/items/vimeo',[
   "skylark-langx/langx",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/query",
+  "skylark-domx-noder",
+  "skylark-domx-query",
   '../../Gallery',
   './video'
 ], function (langx, noder, $, Gallery, video) {
@@ -11414,8 +18840,8 @@ define('skylark-blueimp-gallery/plugins/items/vimeo',[
 });
 define('skylark-blueimp-gallery/plugins/items/youtube',[
   "skylark-langx/langx",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/query",
+  "skylark-domx-noder",
+  "skylark-domx-query",
   '../../Gallery',
   './video'
 ], function (langx, noder, $, Gallery, video) {
@@ -11629,7 +19055,7 @@ define('skylark-blueimp-gallery/plugins/items/youtube',[
 
 define('skylark-blueimp-gallery/plugins/views/SliderView',[
   'skylark-langx/langx',
-  'skylark-utils-dom/noder',
+  'skylark-domx-noder',
   '../../Gallery'
 ], function (langx, ndoer, Gallery) {
   'use strict'
@@ -13079,3 +20505,4 @@ define('skylark-blueimp-gallery', ['skylark-blueimp-gallery/main'], function (ma
 
 
 },this);
+//# sourceMappingURL=sourcemaps/skylark-blueimp-gallery-all.js.map

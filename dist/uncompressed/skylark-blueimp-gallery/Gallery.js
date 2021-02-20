@@ -1,14 +1,14 @@
 define([
 	"skylark-langx/skylark",
 	"skylark-langx/langx",
-	"skylark-utils-dom/noder",
-  	"skylark-ui-swt/Widget",
-], function (skylark, langx, noder, Widget) {
+	"skylark-domx-noder",
+	"skylark-domx-plugins"
+], function (skylark,langx,noder,plugins) {
 	var registry = {
 		views: [],
 		items: []
 	};
-	var Gallery = Widget.inherit({
+	var Gallery = plugins.Plugin.inherit({
 		klassName: "Gallery",
 	    pluginName : "blueimp.gallery",
 
@@ -29,10 +29,11 @@ define([
 		 * @param {Element} el The container element. 
 		 */
 		//init: function (el, options) {
-		_init : function() {
+		_construct : function(el,options) {
+			this.overrided(el,options);
 			//this.overrided(el,options);	
-			this.$el = this._elm; // $(el);
-			this.el = this.$el[0];
+			this.$el = this.$(); // $(el);
+			this.el = this._elm;
 			//this.options = langx.mixin({}, Gallery.prototype.options, options);
 			this._itemFactories = {
 
@@ -231,6 +232,9 @@ define([
 		}
 	});
 
+    plugins.register(Gallery);
+
+
 	var ItemFactoryBase = Gallery.ItemFactoryBase = langx.Evented.inherit({
 		klassName: "ItemFactoryBase",
 
@@ -282,7 +286,5 @@ define([
 		plugins.push(setting);
 	};
 
-	skylark.itg = skylark.itg || {};
-	skylark.itg.blueimp = skylark.itg.blueimp || {};
-	return skylark.itg.blueimp.Gallery = Gallery;
+	return skylark.attach("intg.blueimp.Gallery",Gallery);
 });

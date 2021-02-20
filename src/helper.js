@@ -1,8 +1,8 @@
 /* global define, window, document */
 
 define([
-  "skylark-utils-dom/langx",
-  "skylark-utils-dom/query"
+  "skylark-langx/langx",
+  "skylark-domx-query"
 ], function (langx, q) {
   'use strict'
   q.extend = langx.mixin;

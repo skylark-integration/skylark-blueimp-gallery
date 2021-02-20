@@ -10,7 +10,7 @@
  */
 
 /* global blueimp, $ */
-var $ = skylarkjs.dom.query,
+var $ = skylarkjs.domx.query,
     langx = skylarkjs.langx;
 
 $(function () {
@@ -147,7 +147,7 @@ $(function () {
       if (viewOptions.filter) {
         links = links.filter(viewOptions.filter);
       }
-      return new skylarkjs.itg.blueimp.Gallery(container[0],{
+      return new skylarkjs.intg.blueimp.Gallery(container[0],{
         items : links, 
         view : {
           mode : "lightbox",

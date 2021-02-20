@@ -75,7 +75,7 @@
   factory(define,require);
 
   if (!isAmd) {
-    var skylarkjs = require("skylark-langx/skylark");
+    var skylarkjs = require("skylark-langx-ns");
 
     if (isCmd) {
       module.exports = skylarkjs;
@@ -89,14 +89,14 @@
 define('skylark-blueimp-gallery/Gallery',[
 	"skylark-langx/skylark",
 	"skylark-langx/langx",
-	"skylark-utils-dom/noder",
-  	"skylark-ui-swt/Widget",
-], function (skylark, langx, noder, Widget) {
+	"skylark-domx-noder",
+	"skylark-domx-plugins"
+], function (skylark,langx,noder,plugins) {
 	var registry = {
 		views: [],
 		items: []
 	};
-	var Gallery = Widget.inherit({
+	var Gallery = plugins.Plugin.inherit({
 		klassName: "Gallery",
 	    pluginName : "blueimp.gallery",
 
@@ -117,10 +117,11 @@ define('skylark-blueimp-gallery/Gallery',[
 		 * @param {Element} el The container element. 
 		 */
 		//init: function (el, options) {
-		_init : function() {
+		_construct : function(el,options) {
+			this.overrided(el,options);
 			//this.overrided(el,options);	
-			this.$el = this._elm; // $(el);
-			this.el = this.$el[0];
+			this.$el = this.$(); // $(el);
+			this.el = this._elm;
 			//this.options = langx.mixin({}, Gallery.prototype.options, options);
 			this._itemFactories = {
 
@@ -319,6 +320,9 @@ define('skylark-blueimp-gallery/Gallery',[
 		}
 	});
 
+    plugins.register(Gallery);
+
+
 	var ItemFactoryBase = Gallery.ItemFactoryBase = langx.Evented.inherit({
 		klassName: "ItemFactoryBase",
 
@@ -370,15 +374,13 @@ define('skylark-blueimp-gallery/Gallery',[
 		plugins.push(setting);
 	};
 
-	skylark.itg = skylark.itg || {};
-	skylark.itg.blueimp = skylark.itg.blueimp || {};
-	return skylark.itg.blueimp.Gallery = Gallery;
+	return skylark.attach("intg.blueimp.Gallery",Gallery);
 });
 /* global define, window, document */
 
 define('skylark-blueimp-gallery/helper',[
-  "skylark-utils-dom/langx",
-  "skylark-utils-dom/query"
+  "skylark-langx/langx",
+  "skylark-domx-query"
 ], function (langx, q) {
   'use strict'
   q.extend = langx.mixin;
@@ -386,8 +388,8 @@ define('skylark-blueimp-gallery/helper',[
 });
 define('skylark-blueimp-gallery/plugins/items/image',[
 	"skylark-langx/langx",
-	"skylark-utils-dom/noder",
-	"skylark-utils-dom/query",
+	"skylark-domx-noder",
+	"skylark-domx-query",
 	'../../Gallery',
 ], function (langx, noder, $, Gallery) {
 	var ImageItemFactory = Gallery.ItemFactoryBase.inherit({
@@ -476,9 +478,9 @@ define('skylark-blueimp-gallery/plugins/items/image',[
 });
 define('skylark-blueimp-gallery/plugins/items/video',[
   "skylark-langx/langx",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/eventer",
-  "skylark-utils-dom/query",
+  "skylark-domx-noder",
+  "skylark-domx-eventer",
+  "skylark-domx-query",
   '../../Gallery',
 ], function (langx, noder, eventer, $, Gallery) {
 
@@ -646,8 +648,8 @@ define('skylark-blueimp-gallery/plugins/items/video',[
 });
 define('skylark-blueimp-gallery/plugins/items/vimeo',[
   "skylark-langx/langx",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/query",
+  "skylark-domx-noder",
+  "skylark-domx-query",
   '../../Gallery',
   './video'
 ], function (langx, noder, $, Gallery, video) {
@@ -853,8 +855,8 @@ define('skylark-blueimp-gallery/plugins/items/vimeo',[
 });
 define('skylark-blueimp-gallery/plugins/items/youtube',[
   "skylark-langx/langx",
-  "skylark-utils-dom/noder",
-  "skylark-utils-dom/query",
+  "skylark-domx-noder",
+  "skylark-domx-query",
   '../../Gallery',
   './video'
 ], function (langx, noder, $, Gallery, video) {
@@ -1068,7 +1070,7 @@ define('skylark-blueimp-gallery/plugins/items/youtube',[
 
 define('skylark-blueimp-gallery/plugins/views/SliderView',[
   'skylark-langx/langx',
-  'skylark-utils-dom/noder',
+  'skylark-domx-noder',
   '../../Gallery'
 ], function (langx, ndoer, Gallery) {
   'use strict'

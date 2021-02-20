@@ -5,5 +5,5 @@
  * @link www.skylarkjs.org
  * @license MIT
  */
-define(["skylark-utils-dom/langx","skylark-utils-dom/query"],function(e,i){"use strict";return i.extend=e.mixin,i});
+define(["skylark-langx/langx","skylark-domx-query"],function(n,e){"use strict";return e.extend=n.mixin,e});
 //# sourceMappingURL=sourcemaps/helper.js.map
